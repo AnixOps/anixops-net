@@ -942,6 +942,8 @@
     <string name="mesh_failure_invalid">操作未完成：参数无效。</string>
     <string name="mesh_failure_not_found">操作未完成：网络不存在。</string>
     <string name="mesh_failure_not_allowed">操作未完成：网络不允许此操作。</string>
+    <string name="mesh_failure_instance_changed">无法加入：本机实例标识已变更，请重新加入。</string>
+    <string name="mesh_failure_engine_unavailable">操作未完成：组网引擎未运行。</string>
     <string name="mesh_failure_other">操作未完成。</string>
     <string name="mesh_notice_path_fallback">自定义路径已回落：%1$s 不可达。%2$s 使用默认路径。</string>
     <string name="mesh_notice_path_unsupported">自定义路径已回落：%1$s 不支持按此路径转发。%2$s 使用默认路径。</string>

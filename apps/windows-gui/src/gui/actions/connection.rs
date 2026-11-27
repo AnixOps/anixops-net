@@ -132,6 +132,14 @@ fn log_mesh(message: &str) {
     let _ = append_managed_log("tauri-gui", &format!("mesh: {message}"));
 }
 
+/// What the system proxy mode's engine gets: the mesh release gate holds here as in TUN mode (`DesktopTun::start_with`),
+/// so a profile with a mesh outbound is refused in both, though the proxy's engine could not run it; and the engine's own
+/// gate, `allow_mesh`, is the release gate in the envelope.
+fn gated_envelope(envelope: &[u8]) -> Result<Vec<u8>, String> {
+    crate::gui::tun_mode::refuse_gated(envelope)?;
+    client_core::backend::mesh::with_allow_mesh_bytes(envelope)
+}
+
 impl DesktopCore {
     pub fn is_running(&mut self) -> Result<bool, String> {
         Ok(self.embedded.as_ref().is_some_and(LocalProxy::is_running)
@@ -301,11 +309,7 @@ impl DesktopCore {
     /// The listener is bound when this returns.
     fn start_embedded(&mut self, envelope: &[u8], listen: SocketAddr) -> Result<(), String> {
         self.stop_embedded();
-        // The mesh release gate holds in system proxy mode as in TUN mode (`DesktopTun::start_with`), so a profile
-        // with a mesh outbound is refused in both, though the proxy's engine could not run it.
-        crate::gui::tun_mode::refuse_gated(envelope)?;
-        // The engine's own gate: `allow_mesh` is the release gate in the envelope.
-        let envelope = client_core::backend::mesh::with_allow_mesh_bytes(envelope)?;
+        let envelope = gated_envelope(envelope)?;
         let proxy =
             LocalProxy::start(&envelope, listen, MixedSettings::default()).map_err(|error| {
                 client_core::backend::mesh::map_kernel_refusal(format!(
@@ -838,6 +842,28 @@ pub fn remove_legacy_service(desktop: &DesktopState) -> Result<LegacyServiceRemo
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// System proxy mode refuses a mesh profile while the release gate is closed, as TUN mode does, and hands the
+    /// engine the gate's value in `allow_mesh`: deleting a step of the helper fails here (a build with the gate open has
+    /// nothing to refuse, but still writes its value); the script locks the call in `start_embedded`.
+    #[test]
+    fn system_proxy_mode_applies_the_mesh_gate() {
+        let enabled = client_core::backend::mesh::ENABLED;
+        let direct = gated_envelope(br#"{"outbound":{"type":"direct"}}"#).unwrap();
+        let sent: serde_json::Value = serde_json::from_slice(&direct).unwrap();
+        assert_eq!(sent["allow_mesh"], serde_json::json!(enabled));
+        let forced =
+            gated_envelope(br#"{"allow_mesh":true,"outbound":{"type":"direct"}}"#).unwrap();
+        let sent: serde_json::Value = serde_json::from_slice(&forced).unwrap();
+        assert_eq!(sent["allow_mesh"], serde_json::json!(enabled));
+        if !enabled {
+            let error = gated_envelope(br#"{"outbound":{"type":"mesh"}}"#).unwrap_err();
+            assert!(
+                client_core::backend::mesh::is_gated_refusal(&error),
+                "{error}"
+            );
+        }
+    }
     use platform_windows::managed::{
         WindowsSystemProxyOwner, WINDOWS_MANAGED_CONFIG_SCHEMA_VERSION,
     };

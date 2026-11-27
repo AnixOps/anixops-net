@@ -3993,11 +3993,9 @@ fn check_profile_runtime_blocking(state: DesktopAppState) -> Result<OperationRes
     let embedded = require_embedded_config()?;
     let envelope = fs::read(&embedded.envelope_path)
         .map_err(|error| format!("Import the profile again before checking it: {error}"))?;
-    RuntimeConfig::from_json(&envelope).map_err(|error| {
-        format!(
-            "The embedded engine rejects this profile: {}",
-            error.message
-        )
+    // As the engine would get it (its gate written), and the kernel's refusal of a mesh outbound is the gated one.
+    client_core::backend::mesh::check_envelope(&String::from_utf8_lossy(&envelope), |error| {
+        format!("The embedded engine rejects this profile: {error}")
     })?;
     let desktop = state
         .desktop
@@ -4587,18 +4585,17 @@ fn embedded_envelope_with_rules(
     let data_sources = !desktop_dns::data_sources::current().is_empty()
         || !desktop_dns::devices::current().is_empty();
     if dns != DnsPreset::System || fake_ip || !rules.is_empty() || redirects || data_sources {
-        RuntimeConfig::from_json(envelope.as_bytes()).map_err(|error| {
+        client_core::backend::mesh::check_envelope(&envelope, |error| {
             if redirects || data_sources {
                 format!(
-                    "the engine rejected the settings, redirects, data lists or device names: {}",
-                    error.message
+                    "the engine rejected the settings, redirects, data lists or device names: {error}"
                 )
             } else if rules.is_empty() {
-                format!("the DNS choice was rejected: {}", error.message)
+                format!("the DNS choice was rejected: {error}")
             } else {
                 refusal::coded(
                     "error.rules_rejected",
-                    format!("the engine rejected the rules: {}", error.message),
+                    format!("the engine rejected the rules: {error}"),
                 )
             }
         })?;

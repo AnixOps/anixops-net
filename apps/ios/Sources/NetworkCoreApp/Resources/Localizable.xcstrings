@@ -21849,6 +21849,38 @@
         }
       }
     },
+    "无法加入：本机实例标识已变更，请重新加入。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cannot join: this device's instance ID changed. Join again."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法加入：本機實例識別碼已變更，請重新加入。"
+          }
+        }
+      }
+    },
+    "操作未完成：组网引擎未运行。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Operation not completed: the mesh engine is not running."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "操作未完成：組網引擎未執行。"
+          }
+        }
+      }
+    },
     "操作未完成：网络不存在。": {
       "localizations": {
         "en": {

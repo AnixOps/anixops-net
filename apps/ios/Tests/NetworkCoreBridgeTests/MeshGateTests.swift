@@ -1,8 +1,8 @@
 @testable import NetworkCoreBridge
 import XCTest
 
-/// The release gate refuses a profile with a mesh outbound while it is closed: the engine compiles mesh in and has
-/// no runtime switch (docs/architecture/mesh-client.md, 发布闸门).
+/// The release gate refuses a profile with a mesh outbound while it is closed: the engine has mesh compiled in and
+/// its only switch is `allow_mesh` (docs/architecture/mesh-client.md, 发布闸门).
 final class MeshGateTests: XCTestCase {
     private func data(_ text: String) -> Data {
         Data(text.utf8)
@@ -103,23 +103,27 @@ final class MeshGateTests: XCTestCase {
 
     func testTheFinalEnvelopeCarriesTheGateAndNeverMoreThanTheGate() throws {
         XCTAssertNil(try allowMesh(base()), "the stored profile carries none")
-        XCTAssertEqual(try allowMesh(base().withAllowMesh(false)) as? Bool, false)
-        XCTAssertEqual(try allowMesh(base().withAllowMesh(true)) as? Bool, true)
+        XCTAssertEqual(try allowMesh(base().settingAllowMesh(false)) as? Bool, false)
+        XCTAssertEqual(try allowMesh(base().settingAllowMesh(true)) as? Bool, true)
         // A config that said true is overwritten by a closed gate.
-        XCTAssertEqual(try allowMesh(base().withAllowMesh(true).withAllowMesh(false)) as? Bool, false)
-        XCTAssertNil(base().withAllowMesh(true).withoutSecret().allowMesh)
+        XCTAssertEqual(try allowMesh(base().settingAllowMesh(true).settingAllowMesh(false)) as? Bool, false)
+        XCTAssertNil(base().settingAllowMesh(true).withoutSecret().allowMesh)
         // What the engine gets (`EngineBudget.encoded`) carries the build's gate.
-        let sent = try JSONSerialization.jsonObject(with: EngineBudget.encoded(base().withAllowMesh(true))) as? [String: Any]
+        let sent = try JSONSerialization.jsonObject(with: EngineBudget.encoded(base().settingAllowMesh(true))) as? [String: Any]
         XCTAssertEqual(sent?["allow_mesh"] as? Bool, MeshSupport.enabled)
+        XCTAssertEqual(base().withAllowMesh().allowMesh, MeshSupport.enabled)
+        XCTAssertEqual(EmbeddedRuntimeConfig.withAllowMesh(["allow_mesh": !MeshSupport.enabled])["allow_mesh"] as? Bool, MeshSupport.enabled)
         // An envelope that is not a config object gets the same.
-        let object = EmbeddedRuntimeConfig.withAllowMesh(["allow_mesh": true, "x": 1], open: false)
+        let object = EmbeddedRuntimeConfig.settingAllowMesh(["allow_mesh": true, "x": 1], false)
         XCTAssertEqual(object["allow_mesh"] as? Bool, false)
-        XCTAssertEqual(EmbeddedRuntimeConfig.withAllowMesh([:], open: true)["allow_mesh"] as? Bool, true)
+        XCTAssertEqual(EmbeddedRuntimeConfig.settingAllowMesh([:], true)["allow_mesh"] as? Bool, true)
     }
 
-    func testTheKernelsOwnRefusalReadsAsTheGatedOne() {
-        XCTAssertTrue(EmbeddedRuntimeConfig.isMeshGated("config_rejected: mesh outbounds are not allowed by this config"))
+    /// Only the extension's own refusal reads as the gated one: the kernel's reaches Swift as a bare code.
+    func testOnlyTheExtensionsOwnRefusalReadsAsTheGatedOne() {
+        XCTAssertTrue(EmbeddedRuntimeConfig.isMeshGated(EmbeddedRuntimeConfig.meshGatedReason))
         XCTAssertFalse(EmbeddedRuntimeConfig.isMeshGated("config_rejected: bad port"))
+        XCTAssertFalse(EmbeddedRuntimeConfig.isMeshGated("config_rejected: mesh outbounds are not allowed by this config"))
     }
 
     func testTheAnswerToCapabilitiesDecidesAvailability() {
@@ -128,6 +132,43 @@ final class MeshGateTests: XCTestCase {
         XCTAssertFalse(MeshSupport.runsMesh(capabilitiesAnswer: data(#"{"ok":false,"error":{"code":"unsupported"}}"#)))
         XCTAssertFalse(MeshSupport.runsMesh(capabilitiesAnswer: data("not json")))
         XCTAssertFalse(MeshSupport.runsMesh(capabilitiesAnswer: nil))
+    }
+
+    /// No answer is not an answer: only a reply is kept (the engine's own refusal is one, "unsupported" is a no).
+    func testOnlyARealAnswerIsKept() {
+        XCTAssertEqual(MeshSupport.meshCapability(capabilitiesAnswer: data(#"{"capabilities":{"mesh":true}}"#)), true)
+        XCTAssertEqual(MeshSupport.meshCapability(capabilitiesAnswer: data(#"{"capabilities":{"mesh":false}}"#)), false)
+        XCTAssertEqual(MeshSupport.meshCapability(capabilitiesAnswer: data(#"{"ok":false,"error":{"code":"unsupported"}}"#)), false)
+        XCTAssertNil(MeshSupport.meshCapability(capabilitiesAnswer: data("not json")))
+        XCTAssertNil(MeshSupport.meshCapability(capabilitiesAnswer: data(#"{"other":1}"#)))
+        XCTAssertNil(MeshSupport.meshCapability(capabilitiesAnswer: nil))
+    }
+
+    /// With an installed probe, availability is the gate and the engine's answer, for both values of the gate; a failed
+    /// probe is not kept and the next ask answers; the answer kept stays. (The gate is a parameter here: a test cannot
+    /// rebuild the app with the other condition.)
+    func testAvailabilityIsTheGateAndTheEnginesAnswerForBothGateValues() {
+        var reply: Data? = nil
+        MeshSupport.installCapabilitiesProbe { reply }
+        defer { MeshSupport.installCapabilitiesProbe { nil } }
+        XCTAssertFalse(MeshSupport.available(enabled: false))
+        // A failed probe: no, and not kept.
+        XCTAssertNil(MeshSupport.askEngine())
+        XCTAssertFalse(MeshSupport.available(enabled: true))
+        // The engine answers: yes with the gate open, no with it closed; kept.
+        reply = data(#"{"capabilities":{"mesh":true}}"#)
+        XCTAssertEqual(MeshSupport.askEngine(), true)
+        XCTAssertTrue(MeshSupport.available(enabled: true))
+        XCTAssertFalse(MeshSupport.available(enabled: false))
+        reply = nil
+        XCTAssertTrue(MeshSupport.available(enabled: true), "a kept answer is not asked again")
+        // An engine that says no stays no with either gate.
+        reply = data(#"{"capabilities":{"mesh":false}}"#)
+        MeshSupport.installCapabilitiesProbe { reply }
+        XCTAssertEqual(MeshSupport.askEngine(), false)
+        XCTAssertFalse(MeshSupport.available(enabled: true))
+        XCTAssertFalse(MeshSupport.available(enabled: false))
+        XCTAssertFalse(MeshSupport.available)
     }
 
     // MARK: call sites
@@ -175,11 +216,21 @@ final class MeshGateTests: XCTestCase {
     /// encodes a config itself, and nothing writes `allow_mesh: true` as a literal.
     func testEveryEngineStartCarriesTheGateInTheEnvelope() throws {
         let provider = try source("Sources/NetworkCorePacketTunnel/PacketTunnelProvider.swift").joined(separator: "\n")
-        XCTAssertGreaterThanOrEqual(provider.components(separatedBy: "EngineBudget.encoded(").count - 1, 4)
+        let lines = provider.components(separatedBy: "\n")
+        func starts(_ function: String) -> Int {
+            body(of: function, in: lines).components(separatedBy: "EngineBudget.encoded(").count - 1
+        }
+        // The start functions each, not the two length checks (`makeSession`, the reload's) that also encode.
+        XCTAssertGreaterThanOrEqual(starts("beginMeshOnly("), 1)
+        XCTAssertGreaterThanOrEqual(starts("makeRuntimeSession("), 3)
         XCTAssertFalse(provider.contains("EmbeddedRuntimeSession(config: config.encoded"))
         let budget = try source("Sources/NetworkCoreBridge/EngineBudget.swift").joined(separator: "\n")
         XCTAssertTrue(budget.contains("config.withAllowMesh().encoded()"))
         let probe = try source("Sources/NetworkCoreAppHost/EngineCapabilities.swift").joined(separator: "\n")
         XCTAssertTrue(probe.contains("EmbeddedRuntimeConfig.withAllowMesh("))
+        let config = try source("Sources/NetworkCoreBridge/EmbeddedRuntimeConfig.swift").joined(separator: "\n")
+        XCTAssertTrue(config.contains("settingAllowMesh(MeshSupport.enabled)"))
+        XCTAssertFalse(config.contains("public func settingAllowMesh"))
+        XCTAssertFalse(config.contains("public static func settingAllowMesh"))
     }
 }

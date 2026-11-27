@@ -938,6 +938,8 @@
     <string name="mesh_failure_invalid">操作未完成：參數無效。</string>
     <string name="mesh_failure_not_found">操作未完成：網路不存在。</string>
     <string name="mesh_failure_not_allowed">操作未完成：網路不允許此操作。</string>
+    <string name="mesh_failure_instance_changed">無法加入：本機實例識別碼已變更，請重新加入。</string>
+    <string name="mesh_failure_engine_unavailable">操作未完成：組網引擎未執行。</string>
     <string name="mesh_failure_other">操作未完成。</string>
     <string name="mesh_notice_path_fallback">自訂路徑已回落：%1$s 無法連線。%2$s 使用預設路徑。</string>
     <string name="mesh_notice_path_unsupported">自訂路徑已回落：%1$s 不支援依此路徑轉送。%2$s 使用預設路徑。</string>

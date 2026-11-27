@@ -369,7 +369,12 @@ pub fn remove_network(
 /// ones were left out (the file could not be read, or the engine would refuse the result: one without the mesh
 /// module).
 pub fn with_joined(dir: &Path, envelope: String) -> (String, Option<String>) {
-    if !ENABLED {
+    joined_into(dir, envelope, ENABLED)
+}
+
+/// [`with_joined`] with the gate as a value, so that a test sees what an open gate hands the engine.
+fn joined_into(dir: &Path, envelope: String, open: bool) -> (String, Option<String>) {
+    if !open {
         return (envelope, None);
     }
     let networks = match load(dir) {
@@ -387,7 +392,7 @@ pub fn with_joined(dir: &Path, envelope: String) -> (String, Option<String>) {
         return (envelope, None);
     };
     let mut meshed = meshed;
-    with_allow_mesh(&mut meshed);
+    set_allow_mesh(&mut meshed, open);
     let meshed = meshed.to_string();
     match engine_embedded::config::RuntimeConfig::from_json(meshed.as_bytes()) {
         Ok(_) => (meshed, None),
@@ -699,13 +704,18 @@ pub fn with_outbounds(profile: &Value, outbounds: &Map<String, Value>) -> Option
 /// [`crate::refusal`]); every window words it itself.
 pub const GATED_CODE: &str = "error.mesh_gated";
 
+/// The refusal of a profile that cannot be read while the gate is closed and that mentions mesh: nothing can tell what
+/// it would build. A plain one (no code), as any invalid configuration; not [`GATED_CODE`].
+const UNREADABLE_PROFILE: &str =
+    "this profile is not a valid configuration (it cannot be read and mentions mesh)";
+
 /// Whether `error` is the refusal [`refuse_gated_outbounds`] makes: it is certain to repeat, so nothing retries it.
 pub fn is_gated_refusal(error: &str) -> bool {
     crate::refusal::split(error).is_some_and(|(code, _)| code == GATED_CODE)
 }
 
 /// Refuses `config`, the final engine profile, while the release gate is closed ([`ENABLED`]) when it holds a mesh
-/// outbound: the engine compiles mesh in and has no runtime switch, so a `"type":"mesh"` entry anywhere the kernel
+/// outbound: the engine has mesh compiled in and its only switch is `allow_mesh` (the second layer behind this refusal), so a `"type":"mesh"` entry anywhere the kernel
 /// builds an outbound would start it, a user-written or imported profile included ([`has_mesh_outbound`]). Nothing
 /// is stripped (a rule may name the tag). Called with the profile of every engine start.
 pub fn refuse_gated_outbounds(config: &Value) -> Result<(), String> {
@@ -763,6 +773,22 @@ pub fn refuse_gated_envelope(envelope: &str) -> Result<(), String> {
     }
 }
 
+/// What every engine start hands the engine: `envelope` after the client's own refusal ([`refuse_gated_outbounds`])
+/// and with the engine's gate written ([`with_allow_mesh_text`]). Text that is not JSON is left to the engine unless
+/// the gate is closed and it names mesh.
+pub fn start_envelope(envelope: &str) -> Result<String, String> {
+    prepared_start(envelope, ENABLED)
+}
+
+/// [`start_envelope`] with the gate as a value: the one function the start paths take their envelope from, so that a
+/// test sees both values of the gate reach the engine. Never called with a value but the release gate outside tests.
+pub(crate) fn prepared_start(envelope: &str, open: bool) -> Result<String, String> {
+    if let Ok(config) = serde_json::from_str::<Value>(envelope) {
+        refuse_outbounds(open, &config)?;
+    }
+    allow_mesh_text(envelope, open)
+}
+
 /// Sets the engine's own gate, `allow_mesh`, to the release gate ([`ENABLED`]) in `config`, a final engine envelope:
 /// the second layer behind [`refuse_gated_outbounds`] (the kernel's default is `false`, and while it is `false` the
 /// engine refuses any mesh outbound and answers no `mesh_*` command). Whatever the envelope said is replaced, so no
@@ -778,22 +804,20 @@ fn set_allow_mesh(config: &mut Value, open: bool) {
 }
 
 /// [`with_allow_mesh`] for an envelope in text: what every engine start hands the engine. Text that is not JSON is
-/// left to the engine to refuse, unless it names mesh and the gate is closed: then it is refused here, as nothing can
-/// tell what it would build.
+/// left to the engine to refuse, unless it names mesh and the gate is closed: then it is refused here as an invalid
+/// configuration ([`UNREADABLE_PROFILE`]), as nothing can tell what it would build.
 pub fn with_allow_mesh_text(envelope: &str) -> Result<String, String> {
     allow_mesh_text(envelope, ENABLED)
 }
 
-fn allow_mesh_text(envelope: &str, open: bool) -> Result<String, String> {
+pub(crate) fn allow_mesh_text(envelope: &str, open: bool) -> Result<String, String> {
     match serde_json::from_str::<Value>(envelope) {
         Ok(mut config) => {
             set_allow_mesh(&mut config, open);
             Ok(config.to_string())
         }
-        Err(_) if !open && envelope.contains("mesh") => Err(crate::refusal::coded(
-            GATED_CODE,
-            "this profile cannot be read and mentions mesh; mesh networks are not available in this version",
-        )),
+        // Not the gated refusal: the profile is damaged, and mesh may be only a name in it.
+        Err(_) if !open && envelope.contains("mesh") => Err(UNREADABLE_PROFILE.to_string()),
         Err(_) => Ok(envelope.to_string()),
     }
 }
@@ -824,6 +848,23 @@ pub fn map_kernel_refusal(error: String) -> String {
         );
     }
     error
+}
+
+/// Checks `envelope` the way the engine would take it: with the engine's gate written ([`with_allow_mesh_text`]), for
+/// the validators that only parse it (saving DNS settings, rules, lists). The kernel's refusal of a mesh outbound
+/// is the client's gated one ([`map_kernel_refusal`]); any other refusal is worded by `wrap` from the engine's message.
+pub fn check_envelope(envelope: &str, wrap: impl FnOnce(String) -> String) -> Result<(), String> {
+    let envelope = with_allow_mesh_text(envelope)?;
+    engine_embedded::config::RuntimeConfig::from_json(envelope.as_bytes())
+        .map(|_| ())
+        .map_err(|error| {
+            let error = map_kernel_refusal(error.message.to_string());
+            if is_gated_refusal(&error) {
+                error
+            } else {
+                wrap(error)
+            }
+        })
 }
 
 /// The profile id of the engine that runs for the mesh alone.
@@ -944,24 +985,27 @@ pub fn supported() -> bool {
 
 fn engine_runs_mesh() -> bool {
     static SUPPORTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *SUPPORTED.get_or_init(|| {
-        let probe = json!({
-            "config_version": 1,
-            "network": { "name": "probe", "secret": "probe", "kind": "managed", "secure_mode": true },
-            "node": { "role": "access" },
-            "peers": [{ "server": "192.0.2.1", "port": 11010, "transport": "tcp" }],
-        });
-        let networks = [SavedNetwork {
-            name: "probe".to_string(),
-            joined: true,
-            config: probe,
-        }];
-        // The same answer the engine gives to `{"cmd":"capabilities"}` with `allow_mesh` set to the gate: its config
-        // builds with the mesh module compiled in. (`engine_runs_mesh` runs only while the gate is open.)
-        only_profile(&outbounds(&networks)).is_some_and(|mut profile| {
-            with_allow_mesh(&mut profile);
-            engine_embedded::config::RuntimeConfig::from_json(profile.to_string().as_bytes()).is_ok()
-        })
+    *SUPPORTED.get_or_init(|| runs_mesh(ENABLED))
+}
+
+/// Whether the engine builds a mesh-only profile with its gate `open` (a test's value; [`engine_runs_mesh`] passes the
+/// release gate). The same answer the engine gives to `{"cmd":"capabilities"}`: its config builds with the mesh module
+/// compiled in and `allow_mesh` true.
+fn runs_mesh(open: bool) -> bool {
+    let probe = json!({
+        "config_version": 1,
+        "network": { "name": "probe", "secret": "probe", "kind": "managed", "secure_mode": true },
+        "node": { "role": "access" },
+        "peers": [{ "server": "192.0.2.1", "port": 11010, "transport": "tcp" }],
+    });
+    let networks = [SavedNetwork {
+        name: "probe".to_string(),
+        joined: true,
+        config: probe,
+    }];
+    only_profile(&outbounds(&networks)).is_some_and(|mut profile| {
+        set_allow_mesh(&mut profile, open);
+        engine_embedded::config::RuntimeConfig::from_json(profile.to_string().as_bytes()).is_ok()
     })
 }
 
@@ -1953,7 +1997,8 @@ mod tests {
         assert_eq!(text["allow_mesh"], json!(ENABLED));
         // Text that cannot be read is refused while the gate is closed if it names mesh, else left to the engine.
         let error = allow_mesh_text(r#"{"outbound":{"type":"mesh""#, false).unwrap_err();
-        assert!(is_gated_refusal(&error), "{error}");
+        assert!(!is_gated_refusal(&error), "{error}");
+        assert_eq!(error, UNREADABLE_PROFILE);
         assert_eq!(
             allow_mesh_text("not json", false),
             Ok("not json".to_string())
@@ -1970,9 +2015,9 @@ mod tests {
         assert_eq!(closed, br#"{"allow_mesh":false}"#.to_vec());
         let open = allow_mesh_bytes(br#"{}"#, true).unwrap();
         assert_eq!(open, br#"{"allow_mesh":true}"#.to_vec());
-        assert!(is_gated_refusal(
-            &allow_mesh_bytes(b"\xff mesh", false).unwrap_err()
-        ));
+        let error = allow_mesh_bytes(b"\xff mesh", false).unwrap_err();
+        assert!(!is_gated_refusal(&error), "{error}");
+        assert_eq!(error, UNREADABLE_PROFILE);
         assert_eq!(allow_mesh_bytes(b"\xff", false), Ok(b"\xff".to_vec()));
     }
 
@@ -1997,5 +2042,81 @@ mod tests {
             panic!("the engine accepted a mesh outbound with allow_mesh false");
         };
         assert_eq!(error.message, engine_embedded::config::MESH_NOT_ALLOWED);
+    }
+
+    /// The probe the 组网 entry depends on: the engine builds a mesh-only profile with its gate open, and not with it
+    /// closed. Deleting the write in `runs_mesh` fails here.
+    #[test]
+    fn the_capability_probe_needs_the_engine_gate_open() {
+        assert!(runs_mesh(true));
+        assert!(!runs_mesh(false));
+        assert_eq!(supported(), ENABLED);
+    }
+
+    /// With the gate open the joined networks reach the engine with `allow_mesh` true and the engine accepts the
+    /// result; closed, the envelope stays as it is.
+    #[cfg(not(target_os = "android"))]
+    #[test]
+    fn joined_networks_reach_the_engine_with_the_gate_open() {
+        let dir = test_dir("joined-gate");
+        store(&dir, &saved_one()).unwrap();
+        let envelope = super::super::engine::direct_envelope();
+        let (kept, why) = joined_into(&dir, envelope.clone(), false);
+        assert_eq!((kept.as_str(), why), (envelope.as_str(), None));
+        let (meshed, why) = joined_into(&dir, envelope.clone(), true);
+        assert_eq!(why, None, "{meshed}");
+        let sent: Value = serde_json::from_str(&meshed).unwrap();
+        assert_eq!(sent["allow_mesh"], json!(true));
+        assert!(has_mesh_outbound(&sent));
+        assert!(engine_embedded::config::RuntimeConfig::from_json(meshed.as_bytes()).is_ok());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// `Engine::start` and `MeshOnly::start` take their envelope from [`prepared_start`]: with the gate open a mesh
+    /// profile gets `allow_mesh` true and the engine builds it; closed, it is refused as gated.
+    #[test]
+    fn the_start_envelope_carries_true_with_the_gate_open() {
+        let profile = only_profile(&outbounds(&saved_one())).expect("a mesh-only profile");
+        let text = profile.to_string();
+        let sent: Value = serde_json::from_str(&prepared_start(&text, true).unwrap()).unwrap();
+        assert_eq!(sent["allow_mesh"], json!(true));
+        assert!(
+            engine_embedded::config::RuntimeConfig::from_json(sent.to_string().as_bytes()).is_ok()
+        );
+        let error = prepared_start(&text, false).unwrap_err();
+        assert!(is_gated_refusal(&error), "{error}");
+    }
+
+    /// The same through `Engine::start`'s own seam (the local proxy, which only builds): open, a mesh profile starts;
+    /// closed, it is refused before anything runs.
+    #[cfg(not(target_os = "android"))]
+    #[test]
+    fn engine_start_hands_the_open_gate_to_the_engine() {
+        let text = only_profile(&outbounds(&saved_one()))
+            .expect("a mesh-only profile")
+            .to_string();
+        let mut engine = super::super::engine::Engine::default();
+        let error = engine.start_gated(&text, "mesh", 0, false).unwrap_err();
+        assert!(is_gated_refusal(&error), "{error}");
+        engine
+            .start_gated(&text, "mesh", 0, true)
+            .expect("the engine builds the mesh profile");
+        assert!(engine.is_running());
+        engine.stop();
+    }
+
+    /// The exit probe's own engine: the running envelope (mesh outbounds inside, no `allow_mesh`) is accepted with the
+    /// gate open and refused by the engine itself, as the gated refusal, with it closed.
+    #[cfg(not(target_os = "android"))]
+    #[test]
+    fn the_exit_probe_hands_the_open_gate_to_its_engine() {
+        let text = only_profile(&outbounds(&saved_one()))
+            .expect("a mesh-only profile")
+            .to_string();
+        let opened = super::super::engine::through_proxy_gated(&text, true, |port| port);
+        assert!(opened.is_ok_and(|port| port != 0));
+        let error =
+            super::super::engine::through_proxy_gated(&text, false, |port| port).unwrap_err();
+        assert!(is_gated_refusal(&error), "{error}");
     }
 }

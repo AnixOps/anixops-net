@@ -953,6 +953,8 @@ private fun failureText(code: String?): String = stringResource(
         "invalid_argument" -> R.string.mesh_failure_invalid
         "not_found" -> R.string.mesh_failure_not_found
         "not_allowed" -> R.string.mesh_failure_not_allowed
+        "instance_id_changed" -> R.string.mesh_failure_instance_changed
+        "engine_unavailable" -> R.string.mesh_failure_engine_unavailable
         else -> R.string.mesh_failure_other
     },
 )

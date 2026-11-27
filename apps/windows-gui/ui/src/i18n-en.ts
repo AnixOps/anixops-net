@@ -1158,6 +1158,8 @@ export const english: Record<string, string> = {
   "操作未完成：参数无效。": "Operation not completed: invalid argument.",
   "操作未完成：网络不存在。": "Operation not completed: the network does not exist.",
   "操作未完成：网络不允许此操作。": "Operation not completed: the network does not allow it.",
+  "无法加入：本机实例标识已变更，请重新加入。": "Cannot join: this device's instance ID changed. Join again.",
+  "操作未完成：组网引擎未运行。": "Operation not completed: the mesh engine is not running.",
   "操作未完成。": "Operation not completed.",
   "自定义路径已回落：{member} 不可达。{target} 使用默认路径。": "Custom path fell back: {member} is unreachable. {target} uses the default path.",
   "自定义路径已回落：{member} 不支持按此路径转发。{target} 使用默认路径。": "Custom path fell back: {member} does not forward on this path. {target} uses the default path.",

@@ -51,6 +51,7 @@ use desktop_dns::redirects::{
     Draft as RedirectDraft, Entry as RedirectEntry, Redirects, View as Redirect,
 };
 use desktop_mitm::Root;
+#[cfg(test)]
 use engine_embedded::config::RuntimeConfig;
 use engine_embedded::profile;
 use node_edits::{NodeEdits, NodeForm};
@@ -633,9 +634,16 @@ impl Backend {
     /// network is joined and this build's engine runs mesh networks.
     pub fn wants_mesh_only(&self) -> bool {
         !self.engine.is_running()
-            && mesh::supported()
+            && self.mesh_supported()
             && mesh::load(self.store.dir())
                 .is_ok_and(|networks| networks.iter().any(|network| network.joined))
+    }
+
+    /// Whether mesh networks run here now: this build's engine runs them ([`mesh::supported`]) and the engine that
+    /// runs, if one does, carries them (the local proxy does not: the 组网 entry follows the running engine, as
+    /// `capabilities.mesh` does).
+    pub fn mesh_supported(&self) -> bool {
+        mesh::supported() && (!self.engine.is_running() || self.engine.carries_mesh())
     }
 
     pub fn mesh_only_running(&self) -> bool {
@@ -737,10 +745,10 @@ impl Backend {
                 let envelope = desktop_dns::apply(&envelope, self.state.dns_preset)?;
                 let envelope = desktop_dns::apply_block_quic(&envelope, self.state.block_quic)?;
                 let envelope = desktop_dns::redirects::apply(&envelope)?;
-                RuntimeConfig::from_json(envelope.as_bytes()).map_err(|error| {
+                mesh::check_envelope(&envelope, |error| {
                     refusal::coded(
                         "error.rules_rejected",
-                        format!("the engine rejected the rules: {}", error.message),
+                        format!("the engine rejected the rules: {error}"),
                     )
                 })?;
                 Some(envelope)
@@ -1323,8 +1331,8 @@ impl Backend {
             // Without a profile there is nothing to check the settings against yet.
             if self.envelope_with_rules(&[]).is_ok() {
                 let envelope = self.envelope()?;
-                RuntimeConfig::from_json(envelope.as_bytes()).map_err(|error| {
-                    format!("the engine rejected the DNS settings: {}", error.message)
+                mesh::check_envelope(&envelope, |error| {
+                    format!("the engine rejected the DNS settings: {error}")
                 })?;
             }
             Ok(())
@@ -1454,8 +1462,8 @@ impl Backend {
         let restarted = desktop_dns::data_sources::replace(next, || {
             if self.envelope_with_rules(&[]).is_ok() {
                 let envelope = self.envelope()?;
-                RuntimeConfig::from_json(envelope.as_bytes()).map_err(|error| {
-                    format!("the engine rejected the data lists: {}", error.message)
+                mesh::check_envelope(&envelope, |error| {
+                    format!("the engine rejected the data lists: {error}")
                 })?;
             }
             self.restart_if_running()
@@ -1498,8 +1506,8 @@ impl Backend {
         let restarted = desktop_dns::devices::replace(next, || {
             if self.envelope_with_rules(&[]).is_ok() {
                 let envelope = self.envelope()?;
-                RuntimeConfig::from_json(envelope.as_bytes()).map_err(|error| {
-                    format!("the engine rejected the device names: {}", error.message)
+                mesh::check_envelope(&envelope, |error| {
+                    format!("the engine rejected the device names: {error}")
                 })?;
             }
             self.restart_if_running()
@@ -1547,8 +1555,8 @@ impl Backend {
         let restarted = desktop_dns::redirects::replace(next, || {
             if self.envelope_with_rules(&[]).is_ok() {
                 let envelope = self.envelope()?;
-                RuntimeConfig::from_json(envelope.as_bytes()).map_err(|error| {
-                    format!("the engine rejected the redirects: {}", error.message)
+                mesh::check_envelope(&envelope, |error| {
+                    format!("the engine rejected the redirects: {error}")
                 })?;
             }
             self.restart_if_running()
@@ -2068,6 +2076,14 @@ impl Backend {
             if let Some(answer) = self.mesh_control(request) {
                 return answer;
             }
+        } else if !self.engine.carries_mesh()
+            && request
+                .get("cmd")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|command| command.starts_with("mesh_"))
+        {
+            // The local proxy carries no mesh: the same refusal the engine gives, without asking it.
+            return Ok(serde_json::json!({ "ok": false, "error": { "code": "unsupported" } }));
         }
         self.engine.control(request)
     }
@@ -2096,7 +2112,7 @@ impl Backend {
                     }),
             );
         }
-        if command == "mesh_status" && mesh::supported() {
+        if command == "mesh_status" && self.mesh_supported() {
             return Some(
                 mesh::load(self.store.dir()).map(|networks| mesh::offline_status(&networks)),
             );

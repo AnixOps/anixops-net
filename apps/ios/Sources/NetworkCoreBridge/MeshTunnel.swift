@@ -10,41 +10,83 @@ public enum MeshSupport {
     /// Whether the answer to `capabilitiesRequest` (`{"capabilities":{"mesh":bool}}`) says the engine runs mesh.
     /// No answer, a refusal or anything else is no.
     public static func runsMesh(capabilitiesAnswer data: Data?) -> Bool {
+        meshCapability(capabilitiesAnswer: data) ?? false
+    }
+
+    /// What the answer says of mesh: `true` or `false` from `{"capabilities":{"mesh":bool}}`, `false` from the engine's
+    /// own refusal (`{"ok":false,...}`: an engine that does not know the command), and `nil` for no answer or one that
+    /// is not an answer at all, which may be asked again.
+    static func meshCapability(capabilitiesAnswer data: Data?) -> Bool? {
         guard let data,
-              let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              let capabilities = object["capabilities"] as? [String: Any],
-              let mesh = capabilities["mesh"] as? NSNumber
+              let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         else {
-            return false
+            return nil
         }
-        return mesh.boolValue
+        if let capabilities = object["capabilities"] as? [String: Any],
+           let mesh = capabilities["mesh"] as? NSNumber {
+            return mesh.boolValue
+        }
+        return object["ok"] as? Bool == false ? false : nil
     }
 
     private static let probeLock = NSLock()
     private static var probe: (() -> Data?)?
+    /// The engine's answer, kept once it was one; a failed probe is not kept.
     private static var probed: Bool?
+    private static var probing = false
+    private static var retryAfter = Date.distantPast
+    /// How long after a failed probe the next read asks again.
+    static let retryDelay: TimeInterval = 5
 
     /// Installs how the app asks an engine for its capabilities: the answer to `capabilitiesRequest` from an engine
-    /// built with the release gate's `allow_mesh` (the Bridge links no engine). Until then no engine runs mesh.
+    /// built with the release gate's `allow_mesh` (the Bridge links no engine). Until then no engine runs mesh. With
+    /// the gate open it asks at once, off the calling thread.
     public static func installCapabilitiesProbe(_ probe: @escaping () -> Data?) {
         probeLock.lock()
-        defer { probeLock.unlock() }
         self.probe = probe
         probed = nil
+        probing = false
+        retryAfter = .distantPast
+        probeLock.unlock()
+        // A build with the gate closed never asks an engine (`available` short-circuits).
+        if enabled {
+            _ = engineRunsMesh
+        }
     }
 
-    /// Whether the engine this build links answers `capabilities.mesh`; asked once, then kept.
+    /// Whether the engine this build links answers `capabilities.mesh`. Never waits for the engine: the first reads (and
+    /// any read after a failed probe, five seconds on) answer no and ask in the background; a successful answer is kept
+    /// for good, a failed one is asked again later.
     static var engineRunsMesh: Bool {
         probeLock.lock()
         defer { probeLock.unlock() }
         if let probed {
             return probed
         }
-        guard let probe else {
-            return false
+        if probe != nil, !probing, Date() >= retryAfter {
+            probing = true
+            DispatchQueue.global(qos: .utility).async { _ = askEngine() }
         }
-        let answer = runsMesh(capabilitiesAnswer: probe())
-        probed = answer
+        return false
+    }
+
+    /// Asks the installed probe now, on the calling thread, and keeps the answer if it is one. `nil` when it is not (or
+    /// no probe is installed), and the next read asks again after `retryDelay`. The lock is not held while the engine
+    /// answers.
+    @discardableResult
+    static func askEngine() -> Bool? {
+        probeLock.lock()
+        let probe = self.probe
+        probeLock.unlock()
+        let answer = probe.flatMap { meshCapability(capabilitiesAnswer: $0()) }
+        probeLock.lock()
+        defer { probeLock.unlock() }
+        probing = false
+        if let answer {
+            probed = answer
+        } else {
+            retryAfter = Date().addingTimeInterval(retryDelay)
+        }
         return answer
     }
 
@@ -68,6 +110,11 @@ public enum MeshSupport {
     #endif
 
     public static var available: Bool {
+        available(enabled: enabled)
+    }
+
+    /// [`available`] with the gate as a value, for tests; `available` passes the release gate.
+    static func available(enabled: Bool) -> Bool {
         enabled && engineRunsMesh
     }
 }

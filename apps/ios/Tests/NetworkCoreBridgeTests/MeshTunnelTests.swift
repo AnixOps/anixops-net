@@ -80,11 +80,13 @@ final class MeshTunnelTests: XCTestCase {
     }
 
     func testMeshNeedsTheReleaseGateAndTheEnginesCapability() {
-        // No probe is installed in the tests: no engine answers, so nothing is available, gate or not.
-        XCTAssertFalse(MeshSupport.available)
-        #if !MESH_PREVIEW
-        // Until kernel 0.3 is complete and audited, no engine turns 组网 on by itself.
-        XCTAssertFalse(MeshSupport.available)
-        #endif
+        // An engine that runs mesh (a probe that answers so) turns it on only with the release gate open, in either build;
+        // `MeshGateTests` runs both values of the gate through `available(enabled:)`.
+        MeshSupport.installCapabilitiesProbe { Data(#"{"capabilities":{"mesh":true}}"#.utf8) }
+        defer { MeshSupport.installCapabilitiesProbe { nil } }
+        XCTAssertEqual(MeshSupport.askEngine(), true)
+        XCTAssertEqual(MeshSupport.available, MeshSupport.enabled)
+        XCTAssertTrue(MeshSupport.available(enabled: true))
+        XCTAssertFalse(MeshSupport.available(enabled: false))
     }
 }

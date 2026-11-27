@@ -977,6 +977,8 @@
     <string name="mesh_failure_invalid">Operation not completed: invalid argument.</string>
     <string name="mesh_failure_not_found">Operation not completed: the network does not exist.</string>
     <string name="mesh_failure_not_allowed">Operation not completed: the network does not allow it.</string>
+    <string name="mesh_failure_instance_changed">Cannot join: this device\'s instance ID changed. Join again.</string>
+    <string name="mesh_failure_engine_unavailable">Operation not completed: the mesh engine is not running.</string>
     <string name="mesh_failure_other">Operation not completed.</string>
     <string name="mesh_notice_path_fallback">Custom path fell back: %1$s is unreachable. %2$s uses the default path.</string>
     <string name="mesh_notice_path_unsupported">Custom path fell back: %1$s does not forward on this path. %2$s uses the default path.</string>

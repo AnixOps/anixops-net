@@ -330,18 +330,27 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
 
     /// The same config telling the engine whether mesh is allowed: the release gate (`MeshSupport.enabled`), the
     /// second layer behind the client's own refusal (`meshGateFailure`). Whatever `allowMesh` held before is replaced,
-    /// so a config can never open the engine's gate by itself. `open` is a parameter for tests only.
-    public func withAllowMesh(_ open: Bool = MeshSupport.enabled) -> EmbeddedRuntimeConfig {
+    /// so a config can never open the engine's gate by itself. Takes no value: the only way to write another one is
+    /// `settingAllowMesh(_:)`, which only tests reach (it is not public).
+    public func withAllowMesh() -> EmbeddedRuntimeConfig {
+        settingAllowMesh(MeshSupport.enabled)
+    }
+
+    /// `withAllowMesh()` with the gate as a value, for tests.
+    func settingAllowMesh(_ open: Bool) -> EmbeddedRuntimeConfig {
         var copy = self
         copy.allowMesh = open
         return copy
     }
 
-    /// `object`, a decoded envelope, with `allow_mesh` set to the release gate (the same as `withAllowMesh(_:)`, for
+    /// `object`, a decoded envelope, with `allow_mesh` set to the release gate (the same as `withAllowMesh()`, for
     /// an envelope that is not an `EmbeddedRuntimeConfig`).
-    public static func withAllowMesh(
-        _ object: [String: Any], open: Bool = MeshSupport.enabled
-    ) -> [String: Any] {
+    public static func withAllowMesh(_ object: [String: Any]) -> [String: Any] {
+        settingAllowMesh(object, MeshSupport.enabled)
+    }
+
+    /// `withAllowMesh(_:)` with the gate as a value, for tests.
+    static func settingAllowMesh(_ object: [String: Any], _ open: Bool) -> [String: Any] {
         var copy = object
         copy["allow_mesh"] = open
         return copy
@@ -557,16 +566,16 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
     public static let meshGatedCode = "error.mesh_gated"
 
     /// Why the engine must not start a profile with a mesh outbound while the release gate is closed: the engine
-    /// compiles mesh in with no runtime switch. Nothing is stripped (a rule may name the tag).
+    /// has mesh compiled in and its only switch is `allow_mesh` (written closed with the gate, the second layer behind
+    /// this refusal). Nothing is stripped (a rule may name the tag).
     public static let meshGatedReason = "\(meshGatedCode): this profile contains a mesh outbound; mesh networks are not available in this version"
 
-    /// The kernel's own refusal of a mesh outbound while `allow_mesh` is off (`config_rejected`,
-    /// `engine_embedded::config::MESH_NOT_ALLOWED`); worded like the client's.
-    static let kernelMeshNotAllowed = "mesh outbounds are not allowed by this config"
-
-    /// Whether `text` is the extension's refusal `meshGatedReason` (the failure's description).
+    /// Whether `text` is the extension's refusal `meshGatedReason` (the failure's description). The kernel's own
+    /// refusal of a mesh outbound while `allow_mesh` is off is not mapped here: through the C ABI it is only
+    /// `NETWORKCORE_IOS_ERR_CONFIG_REJECTED` with no message (`EmbeddedRuntimeSession.Failure` carries the code alone),
+    /// so a profile the client's gate missed reads as a rejected configuration, never as this one.
     public static func isMeshGated(_ text: String) -> Bool {
-        text.contains(meshGatedCode + ":") || text.contains(kernelMeshNotAllowed)
+        text.contains(meshGatedCode + ":")
     }
 
     /// The refusal for `data`, the final engine profile; `nil` when it may start.

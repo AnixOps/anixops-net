@@ -43,28 +43,47 @@ for file in "${files[@]}"; do
     done
 done
 
-# Source without comment lines (`//`, `///`, `//!`): a call named in a comment is not a call. With a function name, only
-# that function's body: from its `fn`/`func` line to the next declaration at the same or a shallower indent.
+# Source without comments (whole-line `//`, `///`, `//!`, `/* */` blocks and spans, and a trailing ` // ...`): a call named in a
+# comment is not a call. With a function name, only that function's body: from its `fn`/`func` line to the next
+# declaration at the same or a shallower indent.
 code_of() {
     local file="$1" function="${2:-}"
     awk -v name="${function}" '
-        /^[[:space:]]*\/\// { next }
-        name == "" { print; next }
         {
-            if (!inside && match($0, "(fn|func) " name "[(<]")) {
+            line = $0
+            if (block) {
+                if (match(line, /\*\//)) { line = substr(line, RSTART + 2); block = 0 } else { next }
+            }
+            while (match(line, /\/\*/)) {
+                rest = substr(line, RSTART + 2)
+                if (match(rest, /\*\//)) {
+                    line = substr(line, 1, RSTART - 1) substr(rest, RSTART + 2)
+                } else {
+                    line = substr(line, 1, RSTART - 1)
+                    block = 1
+                    break
+                }
+            }
+            if (line ~ /^[[:space:]]*\/\//) { next }
+            sub(/[[:space:]]\/\/.*$/, "", line)
+            if (block && line ~ /^[[:space:]]*$/) { next }
+        }
+        name == "" { print line; next }
+        {
+            if (!inside && match(line, "(fn|func) " name "[(<]")) {
                 inside = 1
-                match($0, /^[[:space:]]*/)
+                match(line, /^[[:space:]]*/)
                 indent = RLENGTH
-                print
+                print line
                 next
             }
             if (inside) {
-                match($0, /^[[:space:]]*/)
-                if (RLENGTH <= indent && $0 ~ /(^|[[:space:]])(fn|func) /) {
+                match(line, /^[[:space:]]*/)
+                if (RLENGTH <= indent && line ~ /(^|[[:space:]])(fn|func) /) {
                     inside = 0
                     next
                 }
-                print
+                print line
             }
         }
     ' "${file}"
@@ -74,21 +93,40 @@ code_of() {
 # a deleted call leaves the flags closed and the engine (mesh compiled in) starting it. And every envelope handed to an
 # engine must carry the engine's own gate, `allow_mesh` set to the release gate (the helper never takes a value): the
 # kernel's default is closed, so a deleted call fails closed, but mesh would then never run in a preview build.
-# file|function (empty: whole file)|pattern|calls at least. Comment lines do not count.
+# file|function (empty: whole file)|pattern|calls at least. Comments do not count. The two helpers that take the gate as a value
+# (Rust `set_allow_mesh`, Swift `settingAllowMesh`) are called only with the release gate (`ENABLED`, `MeshSupport.enabled`)
+# and are never public: the checks above pin each call site and each default.
 checks=(
-    "crates/client-core/src/backend/engine.rs|start|mesh::refuse_gated_envelope(|2"
-    "crates/client-core/src/backend/engine.rs|start|mesh::with_allow_mesh_text(|2"
-    "crates/client-core/src/backend/engine.rs|through_temporary_proxy|mesh::with_allow_mesh_text(|1"
-    "crates/client-core/src/backend/mesh.rs|with_joined|with_allow_mesh(&mut meshed)|1"
+    "crates/client-core/src/backend/engine.rs|start|self.start_gated(envelope, node_id, port, super::mesh::ENABLED)|1"
+    "crates/client-core/src/backend/engine.rs|start|super::mesh::start_envelope(envelope)|1"
+    "crates/client-core/src/backend/engine.rs|start_gated|super::mesh::prepared_start(envelope, open)|1"
+    "crates/client-core/src/backend/engine.rs|through_temporary_proxy|through_proxy_gated(envelope, super::mesh::ENABLED, probe)|1"
+    "crates/client-core/src/backend/engine.rs|through_proxy_gated|super::mesh::allow_mesh_text(envelope, open)|1"
+    "crates/client-core/src/backend/mesh.rs|with_joined|joined_into(dir, envelope, ENABLED)|1"
+    "crates/client-core/src/backend/mesh.rs|joined_into|set_allow_mesh(&mut meshed, open)|1"
+    "crates/client-core/src/backend/mesh.rs|with_allow_mesh|set_allow_mesh(config, ENABLED)|1"
+    "crates/client-core/src/backend/mesh.rs|with_allow_mesh_text|allow_mesh_text(envelope, ENABLED)|1"
+    "crates/client-core/src/backend/mesh.rs|with_allow_mesh_bytes|allow_mesh_bytes(envelope, ENABLED)|1"
+    "crates/client-core/src/backend/mesh.rs|start_envelope|prepared_start(envelope, ENABLED)|1"
+    "crates/client-core/src/backend/mesh.rs|prepared_start|allow_mesh_text(envelope, open)|1"
+    "crates/client-core/src/backend/mesh.rs|engine_runs_mesh|runs_mesh(ENABLED)|1"
+    "crates/client-core/src/backend/mesh.rs|runs_mesh|set_allow_mesh(&mut profile, open)|1"
+    "crates/client-core/src/backend/mesh.rs|check_envelope|with_allow_mesh_text(envelope)|1"
     "apps/windows-gui/src/gui/tun_mode.rs|start_with|refuse_gated(envelope)|1"
     "apps/windows-gui/src/gui/tun_mode.rs|start_with|mesh::with_allow_mesh_bytes(|1"
-    "apps/windows-gui/src/gui/actions/connection.rs|start_embedded|tun_mode::refuse_gated(envelope)|1"
-    "apps/windows-gui/src/gui/actions/connection.rs|start_embedded|mesh::with_allow_mesh_bytes(|1"
+    "apps/windows-gui/src/gui/actions/connection.rs|start_embedded|gated_envelope(envelope)|1"
+    "apps/windows-gui/src/gui/actions/connection.rs|gated_envelope|tun_mode::refuse_gated(envelope)|1"
+    "apps/windows-gui/src/gui/actions/connection.rs|gated_envelope|mesh::with_allow_mesh_bytes(envelope)|1"
     "apps/ios/Sources/NetworkCorePacketTunnel/PacketTunnelProvider.swift|beginTunnel|EmbeddedRuntimeConfig.meshGateFailure(of: |1"
     "apps/ios/Sources/NetworkCorePacketTunnel/PacketTunnelProvider.swift|beginMeshOnly|EmbeddedRuntimeConfig.meshGateFailure(of: |1"
     "apps/ios/Sources/NetworkCorePacketTunnel/PacketTunnelProvider.swift|handleAppMessage|EmbeddedRuntimeConfig.meshGateControlRefusal(|1"
-    "apps/ios/Sources/NetworkCorePacketTunnel/PacketTunnelProvider.swift||EngineBudget.encoded(|4"
+    "apps/ios/Sources/NetworkCorePacketTunnel/PacketTunnelProvider.swift|beginMeshOnly|EngineBudget.encoded(|1"
+    "apps/ios/Sources/NetworkCorePacketTunnel/PacketTunnelProvider.swift|makeRuntimeSession|EngineBudget.encoded(|3"
     "apps/ios/Sources/NetworkCoreBridge/EngineBudget.swift|encoded|config.withAllowMesh().encoded()|1"
+    "apps/ios/Sources/NetworkCoreBridge/EmbeddedRuntimeConfig.swift|withAllowMesh|settingAllowMesh(MeshSupport.enabled)|1"
+    "apps/ios/Sources/NetworkCoreBridge/EmbeddedRuntimeConfig.swift|withAllowMesh|settingAllowMesh(object, MeshSupport.enabled)|1"
+    "apps/ios/Sources/NetworkCoreBridge/MeshTunnel.swift|available|enabled && engineRunsMesh|1"
+    "apps/ios/Sources/NetworkCoreBridge/MeshTunnel.swift||available(enabled: enabled)|1"
     "apps/ios/Sources/NetworkCoreAppHost/EngineCapabilities.swift|answer|EmbeddedRuntimeConfig.withAllowMesh(|1"
 )
 for check in "${checks[@]}"; do
@@ -101,17 +139,40 @@ for check in "${checks[@]}"; do
 done
 
 # No source writes the engine's gate open by itself: `allow_mesh` is only ever the release gate's value. Tests may spell
-# it (Rust: everything after the first `#[cfg(test)]` line; Swift and Kotlin: the test folders).
+# it (Rust: everything from a `#[cfg(test)] mod` on; Swift and Kotlin: the test folders). A line of code (comments
+# stripped) that names the field or one of its helpers (`allow_mesh`, `allowMesh`, `AllowMesh`) and the word `true` is
+# refused, which covers `allow_mesh: true`, `allowMesh = true`, `withAllowMesh(true)`, `withAllowMesh(dict, open: true)`,
+# `set_allow_mesh(x, true)`, `allow_mesh_text(x, true)`, `Value::Bool(true)` on the insert line, `["allow_mesh"] = true`
+# and an escaped `\"allow_mesh\":true`. The helpers that take a value are also refused when called with it spelled `true`
+# on a line of their own (`prepared_start`, `start_gated`, `through_proxy_gated`, `runs_mesh`, `joined_into`).
+# A `#[cfg(test)]` before anything but a `mod` or a `use` would hide the code after it from the scan, so it is refused.
+forbidden='[aA]llow_?[mM]esh.*(^|[^[:alnum:]_])true([^[:alnum:]_]|$)'
+helpers='(prepared_start|start_gated|through_proxy_gated|runs_mesh|joined_into|settingAllowMesh|available)\(([^)]*[^[:alnum:]_])?true([^[:alnum:]_]|$)'
 while IFS= read -r file; do
     case "${file}" in
         */Tests/* | */test/* | */tests/* | */node_modules/*) continue ;;
     esac
     if [[ "${file}" == *.rs ]]; then
-        text=$(awk '/^[[:space:]]*#\[cfg\(test\)\]/ { exit } { print }' "${file}")
+        text=$(awk '
+            /^[[:space:]]*#\[cfg\(test\)\]/ { pending = 1; next }
+            pending && /^[[:space:]]*(#\[|\/\/)/ { next }
+            pending && /^[[:space:]]*(pub(\([a-z]+\))?[[:space:]]+)?mod[[:space:]]/ { exit }
+            pending && /^[[:space:]]*use[[:space:]]/ { pending = 0; next }
+            pending { print "@@cfg-test-item"; pending = 0 }
+            { print }
+        ' "${file}")
+        if printf '%s\n' "${text}" | grep -q '^@@cfg-test-item$'; then
+            echo "::error file=${file}::${file} has a #[cfg(test)] item that is neither a mod nor a use; the scan for a hard-coded allow_mesh true would skip what follows it."
+            found=1
+        fi
     else
         text=$(cat "${file}")
     fi
-    if printf '%s\n' "${text}" | grep -Ev '^[[:space:]]*//' | grep -En 'allow_?[mM]esh"?[[:space:]]*[:=][[:space:]]*true'; then
+    stripped=$(printf '%s\n' "${text}" | awk -v RS='\n' '
+        /^[[:space:]]*\/\// { next }
+        { sub(/[[:space:]]\/\/.*$/, ""); print }
+    ')
+    if printf '%s\n' "${stripped}" | grep -En "${forbidden}|${helpers}"; then
         echo "::error file=${file}::${file} hard-codes allow_mesh true; it is the release gate's value (mesh::with_allow_mesh, EmbeddedRuntimeConfig.withAllowMesh)."
         found=1
     fi
