@@ -1993,7 +1993,9 @@ mod tests {
     fn a_closed_gate_leaves_the_engine_to_refuse_mesh_too() {
         let envelope = r#"{"schema_version":1,"profile_id":"p","outbound":{"type":"mesh"}}"#;
         let sent = allow_mesh_text(envelope, false).unwrap();
-        let error = engine_embedded::config::RuntimeConfig::from_json(sent.as_bytes()).unwrap_err();
+        let Err(error) = engine_embedded::config::RuntimeConfig::from_json(sent.as_bytes()) else {
+            panic!("the engine accepted a mesh outbound with allow_mesh false");
+        };
         assert_eq!(error.message, engine_embedded::config::MESH_NOT_ALLOWED);
     }
 }
