@@ -432,6 +432,8 @@ impl Backend {
         }
         // The cached contents and node edits on disk name the numbers in use, whatever the index says.
         state.reserve_source_numbers(store.highest_source_number());
+        #[cfg(test)]
+        pin_shared_test_files();
         desktop_dns::custom::use_file(store.dir().join("dns-settings.json"));
         desktop_dns::redirects::use_file(store.dir().join("redirects.json"));
         desktop_dns::data_sources::use_file(store.dir().join("data-sources.json"));
@@ -2787,6 +2789,20 @@ pub fn format_time(seconds: u64) -> String {
 /// How long a delay result reads in a message.
 pub fn format_delay(delay: Duration) -> String {
     format!("{} ms", delay.as_millis())
+}
+
+/// Tests open many backends in one process, each in a folder of its own that it removes when done, but the DNS
+/// files are process-wide and set only once. They go to one folder that no test removes, so a test never writes
+/// into a folder another test is removing (on Windows that fails with "Access is denied").
+#[cfg(test)]
+fn pin_shared_test_files() {
+    let dir =
+        std::env::temp_dir().join(format!("anixops-net-backend-shared-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    desktop_dns::custom::use_file(dir.join("dns-settings.json"));
+    desktop_dns::redirects::use_file(dir.join("redirects.json"));
+    desktop_dns::data_sources::use_file(dir.join("data-sources.json"));
+    desktop_dns::devices::use_file(dir.join("devices.json"));
 }
 
 #[cfg(test)]
