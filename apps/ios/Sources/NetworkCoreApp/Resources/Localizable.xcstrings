@@ -23065,6 +23065,22 @@
         }
       }
     },
+    "与网络 %@ 中的同名设备重名，域名解析会返回全部地址。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shares its name with a device in network %@. Name lookups return all addresses."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "與網路 %@ 中的同名裝置重名，網域名稱解析會傳回全部位址。"
+          }
+        }
+      }
+    },
     "地址未受管：虚拟地址可能变化，内网域名可能随之失效。": {
       "localizations": {
         "en": {

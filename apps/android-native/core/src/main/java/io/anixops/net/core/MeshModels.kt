@@ -85,6 +85,10 @@ data class MeshMemberRow(
     val open: Boolean = false,
     /** `duplicate`, `unmanaged`, `fallback`, `first_hop_only`. */
     val marks: List<String> = emptyList(),
+    /** Another member in this network's region has the same name (`duplicateOf`). */
+    val duplicateInRegion: Boolean = false,
+    /** Other networks that answer the same name (display names); only given when there are some. */
+    val duplicateNetworks: List<String> = emptyList(),
 )
 
 @Serializable

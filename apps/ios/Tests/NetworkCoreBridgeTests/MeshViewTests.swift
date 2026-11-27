@@ -71,6 +71,44 @@ final class MeshViewTests: XCTestCase {
         XCTAssertNil(MeshView.Cidr("example"))
     }
 
+    func testANameAnotherNetworkAnswersMarksTheMember() throws {
+        let status: [String: Any] = [
+            "self": ["id": "m-self", "name": "Par-Laptop"],
+            "members": [["id": "m-1", "name": "nas", "state": "online"], ["id": "m-2", "name": "tv"]],
+            "networks": [["id": "home", "name": "Home"]],
+            "names": [
+                ["name": "par-laptop", "addresses": ["10.0.0.5"], "source": "member", "duplicate": true,
+                 "answerable": true, "duplicateNetworks": ["lab", "home"]],
+                ["name": "nas", "addresses": ["10.0.0.6"], "source": "member", "duplicate": true,
+                 "answerable": true, "duplicateNetworks": ["home"]],
+                ["name": "tv", "addresses": ["10.0.0.7"], "source": "member", "duplicate": true,
+                 "answerable": true, "duplicateNetworks": [String]()],
+            ],
+        ]
+        let everyone = MeshView.allMembers(status)
+        let own = try XCTUnwrap(MeshView.memberRow(everyone[0], devices: [], query: "", address: nil))
+        XCTAssertEqual(own["marks"] as? [String], ["duplicate"])
+        // Network names where `networks[]` has them, else ids.
+        XCTAssertEqual(own["duplicateNetworks"] as? [String], ["lab", "Home"])
+        XCTAssertEqual(MeshView.duplicateNetworks(status, everyone[1]), ["Home"])
+        // `duplicate: true` with no other network is the same-network case, which `duplicateOf` carries.
+        let tv = try XCTUnwrap(MeshView.memberRow(everyone[2], devices: [], query: "", address: nil))
+        XCTAssertEqual(tv["marks"] as? [String], [])
+        XCTAssertNil(tv["duplicateNetworks"])
+    }
+
+    func testWithoutNamesTheDuplicateMarkComesFromDuplicateOfOnly() throws {
+        let status: [String: Any] = [
+            "members": [["id": "m-1", "name": "nas", "duplicateOf": ["m-2"]], ["id": "m-2", "name": "nas"]],
+        ]
+        let everyone = MeshView.allMembers(status)
+        let first = try XCTUnwrap(MeshView.memberRow(everyone[0], devices: [], query: "", address: nil))
+        XCTAssertEqual(first["marks"] as? [String], ["duplicate"])
+        XCTAssertNil(first["duplicateNetworks"])
+        let second = try XCTUnwrap(MeshView.memberRow(everyone[1], devices: [], query: "", address: nil))
+        XCTAssertEqual(second["marks"] as? [String], [])
+    }
+
     func testStripV04LeavesTheKernel03Fields() throws {
         let status: [String: Any] = [
             "network": ["state": "joined"],

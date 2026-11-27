@@ -1035,13 +1035,20 @@ struct MeshMemberDetail: View {
     @ViewBuilder
     private func notes(_ member: MeshObject, status: MeshObject) -> some View {
         let duplicates = member.strings("duplicateOf")
+        let networks = MeshView.duplicateNetworks(status.raw, member.raw)
         let unmanaged = member.raw["addressManaged"] as? Bool == false
             && ["border", "gateway", "host", "server"].contains(member.string("role") ?? "")
-        if !duplicates.isEmpty || unmanaged {
+        if !duplicates.isEmpty || !networks.isEmpty || unmanaged {
             Section {
                 if !duplicates.isEmpty {
                     let names = duplicates.map { name($0, status: status) }.formatted(.list(type: .and))
                     Text("与 \(names) 重名。")
+                        .font(.subheadline)
+                        .listRowBackground(brand.surface)
+                }
+                if !networks.isEmpty {
+                    let shown = networks.formatted(.list(type: .and))
+                    Text("与网络 \(shown) 中的同名设备重名，域名解析会返回全部地址。")
                         .font(.subheadline)
                         .listRowBackground(brand.surface)
                 }
