@@ -307,7 +307,7 @@
   `DesktopTun::start_with`（TUN 模式与仅组网）、Apple 扩展的 `launchTunnel` 与 `beginMeshOnly`；被拒绝的重启先停掉旧引擎，不留旧连接；
   按需连接把它当作不可重试的失败。门检查的调用点由 `mesh-release-gate.sh` 断言存在。Windows 桌面的系统代理模式（本地代理）同样拒绝
   （`start_embedded`），与 TUN 模式一致。内联 `via` 的递归最多跟 64 层，更深的按「含组网」处理（内核本来就拒绝超过 4 层的链）。
-- 内核层的第二道门（内核固定在 v0.3.0-rc.2（`ce0cb5765a0aeb94845c0cfef9d71bbf39ba028e`，release/0.3），core#424、#425）：内核的信封字段
+- 内核层的第二道门（内核固定在 v0.3.0（`6790d8675309d5d2cb719a5fcee4acca69735663`，release/0.3），core#424、#425）：内核的信封字段
   `allow_mesh`（布尔，缺省 `false`）为 `false` 或缺省时，`RuntimeConfig::from_json` 以 `config_rejected`、固定消息
   `mesh outbounds are not allowed by this config` 拒绝任何位置的组网出站，该运行实例 `capabilities.mesh` 为 `false`，所有
   `mesh_*` 命令返回 `unsupported`。两层都保留，不得以「内核已有开关」为由删掉客户端门：客户端门先拒绝，保证各端错误码都是
