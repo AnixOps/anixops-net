@@ -75,6 +75,10 @@ export interface MeshMemberRow {
   open?: boolean;
   /** `duplicate`, `unmanaged`, `external_bridge` (it imports an external network), `fallback`, `first_hop_only`. */
   marks?: string[];
+  /** Another member in this network's region has the same name (`duplicateOf`); only given when true. */
+  duplicateInRegion?: boolean;
+  /** Other networks that answer the same name (display names); only given when there are some. */
+  duplicateNetworks?: string[];
 }
 
 export interface MeshChild {

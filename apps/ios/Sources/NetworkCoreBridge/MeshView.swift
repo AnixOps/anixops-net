@@ -166,7 +166,57 @@ public enum MeshView {
             members.append(own)
         }
         members.append(contentsOf: list(status, "members").map { ($0 as? [String: Any]) ?? [:] })
-        return members
+        // Members whose name other networks answer too carry the display names of those networks (R28).
+        return members.map { member in
+            let networks = duplicateNetworks(status, member)
+            guard !networks.isEmpty else { return member }
+            var marked = member
+            marked["duplicateNetworks"] = networks
+            return marked
+        }
+    }
+
+    /// The other networks whose records the tunnel merges into the answer for this member's name: the
+    /// `duplicateNetworks` of the top-level `names[]` entry for the member (ASCII case-insensitive), as network
+    /// names where `networks[]` has them, else ids. Empty when `names` is absent (older kernels).
+    public static func duplicateNetworks(_ status: Any?, _ member: [String: Any]) -> [String] {
+        guard let key = nameKey(status, member) else { return [] }
+        var shown: [String] = []
+        for entry in list(status, "names") where asciiLowercased(text(entry, "name")) == key {
+            for case let id as String in list(entry, "duplicateNetworks") {
+                let label = list(status, "networks").first(where: { text($0, "id") == id })
+                    .flatMap { optText($0, "name") } ?? id
+                if !shown.contains(label) { shown.append(label) }
+            }
+        }
+        return shown
+    }
+
+    /// The member's entry in `names[]`: its domain without the network's suffix, `名.地区` (lowercase). The first
+    /// two labels when the domain does not end in the suffix; nil without a domain.
+    static func nameKey(_ status: Any?, _ member: [String: Any]) -> String? {
+        var domain = asciiLowercased(text(member, "domain"))
+        while domain.hasSuffix(".") { domain.removeLast() }
+        guard !domain.isEmpty else { return nil }
+        let network = (status as? [String: Any])?["network"]
+        let suffix = asciiLowercased(text(network, "dnsSuffix")).trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        if !suffix.isEmpty, domain.hasSuffix("." + suffix) {
+            return String(domain.dropLast(suffix.count + 1))
+        }
+        let labels = domain.split(separator: ".", omittingEmptySubsequences: false)
+        return labels.count >= 2 ? labels[0..<2].joined(separator: ".") : nil
+    }
+
+    private static func asciiLowercased(_ value: String) -> String {
+        var scalars = String.UnicodeScalarView()
+        for scalar in value.unicodeScalars {
+            if (65...90).contains(scalar.value), let lower = Unicode.Scalar(scalar.value + 32) {
+                scalars.append(lower)
+            } else {
+                scalars.append(scalar)
+            }
+        }
+        return String(scalars)
     }
 
     static func memberName(_ members: [[String: Any]], _ id: String) -> String {
@@ -241,7 +291,7 @@ public enum MeshView {
 
     static func marks(_ member: [String: Any]) -> [String] {
         var marks: [String] = []
-        if !list(member, "duplicateOf").isEmpty { marks.append("duplicate") }
+        if !list(member, "duplicateOf").isEmpty || !list(member, "duplicateNetworks").isEmpty { marks.append("duplicate") }
         let infrastructure = ["border", "gateway", "host", "server"].contains(text(member, "role"))
         if infrastructure && bool(member, "addressManaged") == false { marks.append("unmanaged") }
         if bool(member, "bridgesExternal") == true { marks.append("external_bridge") }
@@ -309,7 +359,7 @@ public enum MeshView {
             return child
         }
         let tone: Any = text(member, "connection") == "self" ? NSNull() as Any : latencyTone(latency(member)) as Any
-        return [
+        var row: [String: Any] = [
             "id": text(member, "id"),
             "name": text(member, "name"),
             "self": bool(member, "self") ?? false,
@@ -330,6 +380,12 @@ public enum MeshView {
             "open": childMatch,
             "marks": marks(member),
         ]
+        // Only given when set, so rows without a duplicate keep their shape: `duplicateInRegion` for a member
+        // sharing its name in this network's region, `duplicateNetworks` when another network answers the name.
+        if !list(member, "duplicateOf").isEmpty { row["duplicateInRegion"] = true }
+        let networks = list(member, "duplicateNetworks")
+        if !networks.isEmpty { row["duplicateNetworks"] = networks }
+        return row
     }
 
     static func worst(_ rows: [[String: Any]]) -> Any {

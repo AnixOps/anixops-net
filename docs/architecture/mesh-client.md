@@ -117,6 +117,7 @@
 | `pathState` | `auto`、`custom`、`fallback`（已回落，`unreachable` 为不可达成员的 id）、`first_hop_only` |
 | `vms` | `[{ "name", "domain", "address" }]`，宿主行的虚拟机 |
 | `duplicateOf` | 同一地区内重名成员的 id |
+| `names[].duplicateNetworks` | 顶层 `names[]`（0.3.1 起）中对应该成员的条目（条目名为 `名.地区`：成员 `domain` 去掉网络的 `dnsSuffix`，ASCII 不分大小写；没有 `domain` 时不匹配）所列的其他网络 id；非空时成员也带「重名」标记，详情按 `networks[]` 的名字列出这些网络（没有时用 id）；缺省或空时不变 |
 | `subnet.state` | `ok`、`unreachable`、`refused`（公网网段，未安装路由） |
 | `subnet.overlaps` | 与之重叠的其他通告网段 |
 | `subnet.localOverlap` | 与本机所在网络重叠；此时 `route` 默认为 `local`（使用本机网络），用户可改为 `mesh` |

@@ -1220,6 +1220,7 @@ export const english: Record<string, string> = {
   "内网域名": "Internal domain name",
   "角色": "Role",
   "本地区有同名成员。": "Another member in this region has the same name.",
+  "网络 {networks} 也应答这个名字，域名解析会返回全部地址。": "Also answered by: {networks}. Name lookups return all addresses.",
   "地址未受管：虚拟地址可能变化，内网域名可能随之失效。": "Address unmanaged: the virtual address may change and the internal domain name may stop resolving.",
   "暂无子网": "No subnets",
   "无匹配的子网": "No matching subnets",

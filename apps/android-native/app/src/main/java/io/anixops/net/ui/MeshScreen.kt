@@ -551,8 +551,16 @@ private fun MemberDetail(page: MeshPage, row: MeshMemberRow) {
             DetailLine(stringResource(R.string.mesh_address), address) { copy(context, address) }
         }
         row.region?.let { DetailLine(stringResource(R.string.mesh_region), page.head.regionName(it).orEmpty(), null) }
-        if (row.marks.contains("duplicate")) {
+        if (row.duplicateInRegion || (row.marks.contains("duplicate") && row.duplicateNetworks.isEmpty())) {
             Text(stringResource(R.string.mesh_duplicate_detail), style = MaterialTheme.typography.bodySmall, color = palette.amberText)
+        }
+        if (row.duplicateNetworks.isNotEmpty()) {
+            val separator = stringResource(R.string.mesh_list_separator)
+            Text(
+                stringResource(R.string.mesh_duplicate_networks_detail, row.duplicateNetworks.joinToString(separator)),
+                style = MaterialTheme.typography.bodySmall,
+                color = palette.amberText,
+            )
         }
         if (row.marks.contains("unmanaged")) {
             Text(stringResource(R.string.mesh_unmanaged_detail), style = MaterialTheme.typography.bodySmall, color = palette.amberText)
