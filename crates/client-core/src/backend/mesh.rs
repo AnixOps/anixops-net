@@ -693,10 +693,19 @@ pub fn with_outbounds(profile: &Value, outbounds: &Map<String, Value>) -> Option
     Some(profile)
 }
 
+/// The refusal code of a profile with a mesh outbound while the release gate is closed (`error.<name>`,
+/// [`crate::refusal`]); every window words it itself.
+pub const GATED_CODE: &str = "error.mesh_gated";
+
+/// Whether `error` is the refusal [`refuse_gated_outbounds`] makes: it is certain to repeat, so nothing retries it.
+pub fn is_gated_refusal(error: &str) -> bool {
+    crate::refusal::split(error).is_some_and(|(code, _)| code == GATED_CODE)
+}
+
 /// Refuses `config`, the final engine profile, while the release gate is closed ([`ENABLED`]) when it holds a mesh
-/// outbound: the engine compiles mesh in and has no runtime switch, so any `"type":"mesh"` entry of
-/// `routing.outbounds` would start it, a user-written or imported profile included. Nothing is stripped (a rule may
-/// name the tag). Called with the profile of every engine start.
+/// outbound: the engine compiles mesh in and has no runtime switch, so a `"type":"mesh"` entry anywhere the kernel
+/// builds an outbound would start it, a user-written or imported profile included ([`has_mesh_outbound`]). Nothing
+/// is stripped (a rule may name the tag). Called with the profile of every engine start.
 pub fn refuse_gated_outbounds(config: &Value) -> Result<(), String> {
     refuse_outbounds(ENABLED, config)
 }
@@ -706,19 +715,29 @@ fn refuse_outbounds(enabled: bool, config: &Value) -> Result<(), String> {
         return Ok(());
     }
     Err(crate::refusal::coded(
-        "mesh.gated",
+        GATED_CODE,
         "this profile contains a mesh outbound; mesh networks are not available in this version",
     ))
 }
 
-/// Whether `routing.outbounds` holds an entry of type `mesh`: the object form (tag to entry) and an array of entries.
+/// Whether the profile builds a mesh outbound, where the kernel builds one: the top-level `outbound`, every entry of
+/// `routing.outbounds` (the object form, tag to entry, or an array of entries), and the inline `via` objects of
+/// either, however deep.
 fn has_mesh_outbound(config: &Value) -> bool {
-    let is_mesh = |entry: &Value| entry.get("type").and_then(Value::as_str) == Some("mesh");
-    match config.pointer("/routing/outbounds") {
-        Some(Value::Object(map)) => map.values().any(is_mesh),
-        Some(Value::Array(list)) => list.iter().any(is_mesh),
-        _ => false,
-    }
+    config.get("outbound").is_some_and(entry_is_mesh)
+        || match config.pointer("/routing/outbounds") {
+            Some(Value::Object(map)) => map.values().any(entry_is_mesh),
+            Some(Value::Array(list)) => list.iter().any(entry_is_mesh),
+            _ => false,
+        }
+}
+
+/// An outbound entry that is of type `mesh` or whose inline `via` chain holds one.
+fn entry_is_mesh(entry: &Value) -> bool {
+    entry.get("type").and_then(Value::as_str) == Some("mesh")
+        || entry
+            .get("via")
+            .is_some_and(|via| via.is_object() && entry_is_mesh(via))
 }
 
 /// [`refuse_gated_outbounds`] for an envelope in text; text that is not JSON is left to the engine to refuse.
@@ -1736,9 +1755,16 @@ mod tests {
         let object = json!({ "routing": { "outbounds": {
             "node": { "type": "ss" }, "mesh-x": { "type": "mesh" } }, "rules": ["FINAL,mesh-x"] } });
         let array = json!({ "routing": { "outbounds": [{ "type": "ss" }, { "type": "mesh" }] } });
-        for config in [&object, &array] {
+        let top = json!({ "outbound": { "type": "mesh" } });
+        let top_via = json!({ "outbound": { "type": "ss", "via": { "type": "mesh" } } });
+        let entry_via = json!({ "routing": { "outbounds": {
+            "a": { "type": "ss", "via": { "type": "ss", "via": { "type": "mesh" } } } } } });
+        let array_via =
+            json!({ "routing": { "outbounds": [{ "type": "ss", "via": { "type": "mesh" } }] } });
+        for config in [&object, &array, &top, &top_via, &entry_via, &array_via] {
             let error = refuse_outbounds(false, config).unwrap_err();
-            assert!(error.starts_with("mesh.gated: "), "{error}");
+            assert!(is_gated_refusal(&error), "{error}");
+            assert!(error.starts_with("error.mesh_gated: "), "{error}");
             assert_eq!(refuse_outbounds(true, config), Ok(()));
         }
     }
@@ -1746,15 +1772,38 @@ mod tests {
     #[test]
     fn a_closed_gate_lets_other_profiles_through() {
         let plain = json!({ "routing": { "outbounds": { "node": { "type": "ss" }, "Mesh": { "type": "Mesh" } } } });
-        let single = json!({ "outbound": { "type": "mesh" } });
+        let plain_via =
+            json!({ "outbound": { "type": "ss", "via": { "type": "ss", "via": "mesh" } } });
         for config in [
             &plain,
-            &single,
+            &plain_via,
+            &json!({ "outbound": { "type": "ss" } }),
             &json!({}),
             &json!({ "routing": { "outbounds": 1 } }),
         ] {
             assert_eq!(refuse_outbounds(false, config), Ok(()));
         }
         assert_eq!(refuse_gated_envelope("not json"), Ok(()));
+    }
+
+    /// Both starts refuse a mesh profile before anything runs, so that removing the call fails here (a build with
+    /// the gate open has nothing to refuse).
+    #[test]
+    fn engine_and_mesh_only_starts_are_gated() {
+        if ENABLED {
+            return;
+        }
+        let envelope = r#"{"outbound":{"type":"mesh"}}"#;
+        let error = super::super::engine::Engine::default()
+            .start(envelope, "node", 0)
+            .unwrap_err();
+        assert!(is_gated_refusal(&error), "{error}");
+        #[cfg(any(target_os = "android", target_os = "linux", windows))]
+        {
+            let error = super::super::engine::MeshOnly::default()
+                .start(envelope)
+                .unwrap_err();
+            assert!(is_gated_refusal(&error), "{error}");
+        }
     }
 }

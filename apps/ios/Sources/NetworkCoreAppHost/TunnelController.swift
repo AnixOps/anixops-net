@@ -3259,7 +3259,11 @@ final class TunnelController {
 
     /// The error and its underlying errors, which carry the extension's fixed failure reason.
     nonisolated private static func describe(disconnectError: NSError) -> String {
-        var lines = [String(localized: "隧道已停止：\(disconnectError.localizedDescription)")]
+        // The extension's English reason for the mesh release gate is worded here, in the user's language.
+        let reason = EmbeddedRuntimeConfig.isMeshGated(disconnectError.localizedDescription)
+            ? String(localized: "此配置包含当前版本尚未开放的组网设置，请移除后再连接。")
+            : disconnectError.localizedDescription
+        var lines = [String(localized: "隧道已停止：\(reason)")]
         var underlying = disconnectError.userInfo[NSUnderlyingErrorKey] as? NSError
         while let error = underlying {
             lines.append("\(error.localizedDescription) (\(error.domain) \(error.code))")

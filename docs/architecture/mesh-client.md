@@ -301,6 +301,13 @@
   `play-bundle.yml` 与 `ci.yml` 中运行：运行环境设了该变量，或发布构建读取的文件（其余 workflow、composite action、
   `.github/scripts`、`.cargo`、各 `build.rs`、Tauri 配置、Apple 工程与 Package、Android 构建脚本）在非注释行打开闸门时失败。
 - 发布门关闭时，客户端拒绝启动包含 `"type":"mesh"` 出站的配置（含用户手写或导入的配置），因为内核默认编入组网且没有运行时开关。
+  检测口径与内核构建出站的位置一致，共三处：顶层 `outbound`；`routing.outbounds` 的每个条目（对象或数组形式）；以及前两者的内联
+  `via` 对象（递归）。拒绝不删除（规则可能引用该 tag），错误码固定为 `error.mesh_gated`，各端自行用本地语言措辞，不含配置内容。
+  每个启动入口都调用同一道门：client-core 的 `Engine::start` 与 `MeshOnly::start`（安卓、Linux、Windows 原生）、Windows 桌面端的
+  `DesktopTun::start_with`（TUN 模式与仅组网）、Apple 扩展的 `launchTunnel` 与 `beginMeshOnly`；被拒绝的重启先停掉旧引擎，不留旧连接；
+  按需连接把它当作不可重试的失败。门检查的调用点由 `mesh-release-gate.sh` 断言存在。
+- 发布门关闭时，Apple 扩展的控制通道拒绝除 `mesh_engine_stop` 以外的所有 `mesh_*` 命令，请求含 `mesh_` 而无法解析时同样拒绝，答
+  `error.mesh_gated`；client-core 的窗口请求在 `activity_request` 中同样拒绝所有 `mesh_*`。
 - 解除闸门：内核线程确认内核 0.3 完成并通过审计后，随下一次内核固定一起修改。
 
 客户端 1.2 的界面另有一道闸门，在内核 0.4 完成并通过审计之前不进入发布版（先开上一道闸门，这一道才有意义）：

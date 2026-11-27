@@ -446,7 +446,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
         // The engine compiles mesh in with no runtime switch: while the release gate is closed a profile with a mesh
         // outbound (hand-written or imported) is refused, not stripped.
-        if let data = try? config.encoded(), let reason = EmbeddedRuntimeConfig.meshGateFailure(data) {
+        if let reason = EmbeddedRuntimeConfig.meshGateFailure(of: config) {
             events.record("mesh outbound refused: release gate closed")
             completionHandler(PacketTunnelFailure(reason: reason, fatal: true))
             return
@@ -559,7 +559,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let session: EmbeddedRuntimeSession
         do {
             let config = EmbeddedRuntimeConfig.meshOnly(meshOutbounds, profileID: Self.meshOnlyProfileID)
-            if let data = try? config.encoded(), let reason = EmbeddedRuntimeConfig.meshGateFailure(data) {
+            if let reason = EmbeddedRuntimeConfig.meshGateFailure(of: config) {
+                events.record("mesh outbound refused: release gate closed")
                 completionHandler(PacketTunnelFailure(reason: reason, fatal: true))
                 return
             }
@@ -863,7 +864,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         case .runtimeStatus:
             completionHandler?(session?.statusJSON())
         case let .control(request):
-            // While the release gate is closed the engine (mesh compiled in) is never asked to save or join one.
+            // While the release gate is closed the engine (mesh compiled in) is asked for no mesh command but stopping.
             if let refusal = EmbeddedRuntimeConfig.meshGateControlRefusal(request) {
                 completionHandler?(refusal)
             } else {

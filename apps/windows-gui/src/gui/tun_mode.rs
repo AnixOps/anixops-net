@@ -178,6 +178,15 @@ pub fn hold_adapter() -> Result<AdapterLease, TunStartError> {
     ADAPTER.acquire(&adapter_lock_path())
 }
 
+/// The mesh release gate for an envelope in bytes (`client_core::backend::mesh::refuse_gated_envelope`); bytes that
+/// are not text are left to the engine to refuse.
+fn refuse_gated(envelope: &[u8]) -> Result<(), String> {
+    match std::str::from_utf8(envelope) {
+        Ok(text) => client_core::backend::mesh::refuse_gated_envelope(text),
+        Err(_) => Ok(()),
+    }
+}
+
 impl DesktopTun {
     /// Creates the adapter, pins the engine's sockets to the physical
     /// interface and starts the packet engine on `envelope`.
@@ -192,6 +201,10 @@ impl DesktopTun {
         envelope: &[u8],
         settings: WindowsTunSettings,
     ) -> Result<Self, TunStartError> {
+        // The adapter and the engine behind it (mesh compiled in) never start for a profile the mesh release gate
+        // refuses: this is the entry of both TUN mode and the mesh alone, and neither goes through client-core's
+        // `Engine`.
+        refuse_gated(envelope).map_err(TunStartError::other)?;
         let config = RuntimeConfig::from_json(envelope).map_err(|error| {
             TunStartError::other(format!(
                 "TUN mode configuration was rejected: {}",
@@ -326,6 +339,31 @@ impl Drop for DesktopTun {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The start refuses before it touches the adapter, so removing the call fails here (a build with the gate open
+    /// has nothing to refuse).
+    #[test]
+    fn tun_mode_and_the_mesh_alone_refuse_a_mesh_profile_while_the_gate_is_closed() {
+        if client_core::backend::mesh::ENABLED {
+            return;
+        }
+        let envelope = br#"{"outbound":{"type":"mesh"}}"#;
+        let error = DesktopTun::start(envelope).err().expect("refused");
+        assert!(
+            client_core::backend::mesh::is_gated_refusal(&error),
+            "{error}"
+        );
+        let error = DesktopTun::start_with(envelope, WindowsTunSettings::default())
+            .err()
+            .expect("refused");
+        assert!(
+            client_core::backend::mesh::is_gated_refusal(&error.message),
+            "{error}"
+        );
+        let via = br#"{"routing":{"outbounds":{"a":{"type":"ss","via":{"type":"mesh"}}}}}"#;
+        assert!(refuse_gated(via).is_err());
+        assert!(refuse_gated(br#"{"outbound":{"type":"ss"}}"#).is_ok());
+    }
 
     #[test]
     fn a_second_process_cannot_take_the_adapter_this_one_holds() {

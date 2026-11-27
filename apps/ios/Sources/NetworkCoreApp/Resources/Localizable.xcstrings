@@ -6179,6 +6179,22 @@
         }
       }
     },
+    "此配置包含当前版本尚未开放的组网设置，请移除后再连接。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This profile contains mesh settings that this version does not support. Remove them and connect again."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此設定包含目前版本尚未開放的組網設定，請移除後再連線。"
+          }
+        }
+      }
+    },
     "连续 5 次没有连上，已停止自动重连。可以重试，或换一个节点。": {
       "localizations": {
         "en": {

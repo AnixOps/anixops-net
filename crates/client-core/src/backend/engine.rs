@@ -437,8 +437,9 @@ impl MeshOnly {
     /// Starts `envelope` (`mesh::only_profile`) on the kept descriptor, after stopping one that runs.
     #[cfg(any(target_os = "android", target_os = "linux", windows))]
     pub fn start(&mut self, envelope: &str) -> Result<(), String> {
-        super::mesh::refuse_gated_envelope(envelope)?;
+        // A refused start still stops the one that runs: no stale engine stays behind the error.
         self.stop();
+        super::mesh::refuse_gated_envelope(envelope)?;
         self.tunnel = Some(TunEngine::start(envelope)?);
         Ok(())
     }
@@ -504,8 +505,12 @@ impl Engine {
         node_id: &str,
         port: u16,
     ) -> Result<SocketAddr, String> {
-        super::mesh::refuse_gated_envelope(envelope)?;
+        // A refused start still stops the engine that runs: no stale engine stays behind the error.
         self.stop_runtime();
+        if let Err(refusal) = super::mesh::refuse_gated_envelope(envelope) {
+            self.node_id = None;
+            return Err(refusal);
+        }
         let address = self.start_runtime(envelope, port)?;
         self.node_id = Some(node_id.to_string());
         // The lists read the new engine now; a session the viewer held after the last stop is let go.

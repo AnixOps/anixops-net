@@ -237,6 +237,15 @@ pub struct Client {
     mesh_watch: Arc<AtomicU64>,
 }
 
+/// The wait before the Wi-Fi rules try a connect again after its `failures`-th failure in a row, or `None` to stop:
+/// a refusal that certainly repeats (the mesh release gate) is not retried.
+fn on_demand_retry_wait(error: &str, failures: u32) -> Option<Duration> {
+    if crate::backend::mesh::is_gated_refusal(error) {
+        return None;
+    }
+    on_demand::retry::after(failures)
+}
+
 fn lock<T>(value: &Mutex<T>) -> MutexGuard<'_, T> {
     value.lock().unwrap_or_else(PoisonError::into_inner)
 }
@@ -1231,7 +1240,7 @@ impl Client {
                                 0
                             };
                             let failures = earlier + 1;
-                            let next = on_demand::retry::after(failures);
+                            let next = on_demand_retry_wait(&error, failures);
                             retry = Some((next.map(|wait| Instant::now() + wait), failures));
                             let notice = if next.is_none() {
                                 client.backend().on_demand_stopped_notice(&error, failures)
@@ -2560,6 +2569,13 @@ fn read_subscription_file(location: &str) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_mesh_gate_refusal_is_not_retried() {
+        let gated = crate::refusal::coded(crate::backend::mesh::GATED_CODE, "gated");
+        assert_eq!(super::on_demand_retry_wait(&gated, 1), None);
+        assert!(super::on_demand_retry_wait("the VPN is not on", 1).is_some());
+    }
+
     use super::*;
 
     #[test]

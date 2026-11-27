@@ -139,7 +139,7 @@ class CodeTexts(private val context: Context) : CoreTexts {
             "error.no_default_route" to R.string.code_error_no_default_route,
             "error.vpn_off" to R.string.code_error_vpn_off,
             "error.rules_rejected" to R.string.code_error_rules_rejected,
-            "mesh.gated" to R.string.code_mesh_gated,
+            "error.mesh_gated" to R.string.code_error_mesh_gated,
             "config.core.routing_import.rule_skipped" to R.string.code_config_core_routing_import_rule_skipped,
             "config.core.routing_import.group_skipped" to R.string.code_config_core_routing_import_group_skipped,
             "config.core.routing_import.member_skipped" to R.string.code_config_core_routing_import_member_skipped,
