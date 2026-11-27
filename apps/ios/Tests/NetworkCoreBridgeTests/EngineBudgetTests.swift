@@ -22,7 +22,7 @@ final class EngineBudgetTests: XCTestCase {
         XCTAssertThrowsError(try EngineBudget.encoded(decrypting)) { error in
             let tooLarge = error as? EngineBudget.TooLarge
             XCTAssertEqual(tooLarge?.limit, EngineBudget.maxConfigBytes)
-            XCTAssertEqual(tooLarge?.bytes, try? decrypting.encoded().count)
+            XCTAssertEqual(tooLarge?.bytes, try? decrypting.withAllowMesh().encoded().count)
         }
         XCTAssertNoThrow(try EngineBudget.encoded(decrypting.withoutMitm()))
 
