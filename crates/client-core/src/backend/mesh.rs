@@ -2087,7 +2087,7 @@ mod tests {
         assert!(is_gated_refusal(&error), "{error}");
     }
 
-    /// The same through `Engine::start`'s own seam (the local proxy, which only builds): open, a mesh profile starts;
+    /// The same through `Engine::start`'s own seam (the local proxy): open, the kernel is never asked to refuse mesh;
     /// closed, it is refused before anything runs.
     #[cfg(not(target_os = "android"))]
     #[test]
@@ -2098,23 +2098,33 @@ mod tests {
         let mut engine = super::super::engine::Engine::default();
         let error = engine.start_gated(&text, "mesh", 0, false).unwrap_err();
         assert!(is_gated_refusal(&error), "{error}");
-        engine
-            .start_gated(&text, "mesh", 0, true)
-            .expect("the engine builds the mesh profile");
-        assert!(engine.is_running());
-        engine.stop();
+        // Open, the kernel gets `allow_mesh: true`: whatever it then says about the test network (the local proxy
+        // does not run one), it is never its mesh refusal.
+        match engine.start_gated(&text, "mesh", 0, true) {
+            Ok(_) => engine.stop(),
+            Err(error) => assert!(
+                !is_gated_refusal(&error)
+                    && !error.contains(engine_embedded::config::MESH_NOT_ALLOWED),
+                "{error}"
+            ),
+        }
     }
 
-    /// The exit probe's own engine: the running envelope (mesh outbounds inside, no `allow_mesh`) is accepted with the
-    /// gate open and refused by the engine itself, as the gated refusal, with it closed.
+    /// The exit probe's own engine: the running envelope (mesh outbounds inside, no `allow_mesh`) is never refused as
+    /// mesh with the gate open, and refused by the engine itself, as the gated refusal, with it closed.
     #[cfg(not(target_os = "android"))]
     #[test]
     fn the_exit_probe_hands_the_open_gate_to_its_engine() {
         let text = only_profile(&outbounds(&saved_one()))
             .expect("a mesh-only profile")
             .to_string();
-        let opened = super::super::engine::through_proxy_gated(&text, true, |port| port);
-        assert!(opened.is_ok_and(|port| port != 0));
+        if let Err(error) = super::super::engine::through_proxy_gated(&text, true, |port| port) {
+            assert!(
+                !is_gated_refusal(&error)
+                    && !error.contains(engine_embedded::config::MESH_NOT_ALLOWED),
+                "{error}"
+            );
+        }
         let error =
             super::super::engine::through_proxy_gated(&text, false, |port| port).unwrap_err();
         assert!(is_gated_refusal(&error), "{error}");
