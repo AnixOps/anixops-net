@@ -437,6 +437,7 @@ impl MeshOnly {
     /// Starts `envelope` (`mesh::only_profile`) on the kept descriptor, after stopping one that runs.
     #[cfg(any(target_os = "android", target_os = "linux", windows))]
     pub fn start(&mut self, envelope: &str) -> Result<(), String> {
+        super::mesh::refuse_gated_envelope(envelope)?;
         self.stop();
         self.tunnel = Some(TunEngine::start(envelope)?);
         Ok(())
@@ -503,6 +504,7 @@ impl Engine {
         node_id: &str,
         port: u16,
     ) -> Result<SocketAddr, String> {
+        super::mesh::refuse_gated_envelope(envelope)?;
         self.stop_runtime();
         let address = self.start_runtime(envelope, port)?;
         self.node_id = Some(node_id.to_string());

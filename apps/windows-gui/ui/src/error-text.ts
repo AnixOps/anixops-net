@@ -33,6 +33,7 @@ export const errorTexts: Record<string, string> = {
   "error.no_default_route": "没有可用的网络：先连上网络，再开启 TUN 模式",
   "error.vpn_off": "VPN 没有打开，请重新连接",
   "error.rules_rejected": "内核不接受这些规则，检查后再保存",
+  "mesh.gated": "此配置包含组网出站，当前版本尚未开放组网。",
 };
 
 /** What failed, by the operation names `run` is given (App.tsx, pages/*.tsx); others read "操作没有完成". */

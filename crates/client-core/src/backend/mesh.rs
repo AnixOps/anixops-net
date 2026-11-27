@@ -693,6 +693,45 @@ pub fn with_outbounds(profile: &Value, outbounds: &Map<String, Value>) -> Option
     Some(profile)
 }
 
+/// Refuses `config`, the final engine profile, while the release gate is closed ([`ENABLED`]) when it holds a mesh
+/// outbound: the engine compiles mesh in and has no runtime switch, so any `"type":"mesh"` entry of
+/// `routing.outbounds` would start it, a user-written or imported profile included. Nothing is stripped (a rule may
+/// name the tag). Called with the profile of every engine start.
+pub fn refuse_gated_outbounds(config: &Value) -> Result<(), String> {
+    refuse_outbounds(ENABLED, config)
+}
+
+fn refuse_outbounds(enabled: bool, config: &Value) -> Result<(), String> {
+    if enabled || !has_mesh_outbound(config) {
+        return Ok(());
+    }
+    Err(crate::refusal::coded(
+        "mesh.gated",
+        "this profile contains a mesh outbound; mesh networks are not available in this version",
+    ))
+}
+
+/// Whether `routing.outbounds` holds an entry of type `mesh`: the object form (tag to entry) and an array of entries.
+fn has_mesh_outbound(config: &Value) -> bool {
+    let is_mesh = |entry: &Value| entry.get("type").and_then(Value::as_str) == Some("mesh");
+    match config.pointer("/routing/outbounds") {
+        Some(Value::Object(map)) => map.values().any(is_mesh),
+        Some(Value::Array(list)) => list.iter().any(is_mesh),
+        _ => false,
+    }
+}
+
+/// [`refuse_gated_outbounds`] for an envelope in text; text that is not JSON is left to the engine to refuse.
+pub fn refuse_gated_envelope(envelope: &str) -> Result<(), String> {
+    if ENABLED {
+        return Ok(());
+    }
+    match serde_json::from_str::<Value>(envelope) {
+        Ok(config) => refuse_gated_outbounds(&config),
+        Err(_) => Ok(()),
+    }
+}
+
 /// The profile id of the engine that runs for the mesh alone.
 pub const ONLY_PROFILE_ID: &str = "mesh-only";
 
@@ -1690,5 +1729,32 @@ mod tests {
         let mut status = json!({ "regions": [], "members": [{ "id": "b", "vms": [] }] });
         gate_status(&mut status);
         assert_eq!(status.get("regions").is_some(), V04_ENABLED);
+    }
+
+    #[test]
+    fn a_closed_gate_refuses_a_profile_with_a_mesh_outbound() {
+        let object = json!({ "routing": { "outbounds": {
+            "node": { "type": "ss" }, "mesh-x": { "type": "mesh" } }, "rules": ["FINAL,mesh-x"] } });
+        let array = json!({ "routing": { "outbounds": [{ "type": "ss" }, { "type": "mesh" }] } });
+        for config in [&object, &array] {
+            let error = refuse_outbounds(false, config).unwrap_err();
+            assert!(error.starts_with("mesh.gated: "), "{error}");
+            assert_eq!(refuse_outbounds(true, config), Ok(()));
+        }
+    }
+
+    #[test]
+    fn a_closed_gate_lets_other_profiles_through() {
+        let plain = json!({ "routing": { "outbounds": { "node": { "type": "ss" }, "Mesh": { "type": "Mesh" } } } });
+        let single = json!({ "outbound": { "type": "mesh" } });
+        for config in [
+            &plain,
+            &single,
+            &json!({}),
+            &json!({ "routing": { "outbounds": 1 } }),
+        ] {
+            assert_eq!(refuse_outbounds(false, config), Ok(()));
+        }
+        assert_eq!(refuse_gated_envelope("not json"), Ok(()));
     }
 }

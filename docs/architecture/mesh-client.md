@@ -300,6 +300,7 @@
 - CI 只在测试步骤里打开（`ci.yml`）。`.github/scripts/mesh-release-gate.sh` 在 `release.yml`、`ios-testflight.yml`、
   `play-bundle.yml` 与 `ci.yml` 中运行：运行环境设了该变量，或发布构建读取的文件（其余 workflow、composite action、
   `.github/scripts`、`.cargo`、各 `build.rs`、Tauri 配置、Apple 工程与 Package、Android 构建脚本）在非注释行打开闸门时失败。
+- 发布门关闭时，客户端拒绝启动包含 `"type":"mesh"` 出站的配置（含用户手写或导入的配置），因为内核默认编入组网且没有运行时开关。
 - 解除闸门：内核线程确认内核 0.3 完成并通过审计后，随下一次内核固定一起修改。
 
 客户端 1.2 的界面另有一道闸门，在内核 0.4 完成并通过审计之前不进入发布版（先开上一道闸门，这一道才有意义）：

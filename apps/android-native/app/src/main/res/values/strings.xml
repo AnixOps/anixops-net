@@ -837,6 +837,7 @@
     <string name="code_error_no_default_route">No network is available: connect to a network, then turn on TUN mode.</string>
     <string name="code_error_vpn_off">The VPN is not on. Connect again.</string>
     <string name="code_error_rules_rejected">The core does not accept these rules. Check them and save again.</string>
+    <string name="code_mesh_gated">This profile contains a mesh outbound; mesh networking is not available in this version.</string>
     <string name="code_config_core_routing_import_rule_skipped">Rule skipped</string>
     <string name="code_config_core_routing_import_group_skipped">Policy group skipped</string>
     <string name="code_config_core_routing_import_member_skipped">Policy group member skipped</string>

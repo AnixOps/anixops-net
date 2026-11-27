@@ -524,6 +524,55 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         encoder.outputFormatting = [.sortedKeys]
         return try encoder.encode(self)
     }
+
+    /// Why the engine must not start `config` while the release gate is closed (`MeshSupport.enabled`): it holds a
+    /// mesh outbound, and the engine compiles mesh in with no runtime switch. Nothing is stripped (a rule may name
+    /// the tag). `nil` when it may start.
+    public static let meshGatedReason = "tunnel profile contains a mesh outbound; mesh networks are not available in this version"
+
+    public static func meshGateFailure(_ data: Data, enabled: Bool = MeshSupport.enabled) -> String? {
+        !enabled && containsMeshOutbound(data) ? meshGatedReason : nil
+    }
+
+    /// The control commands that would make the engine save or join a mesh network.
+    static let meshGatedCommands: Set<String> = ["mesh_save_network", "mesh_join"]
+
+    /// A refusal (`{"ok":false,"error":{"code":"unsupported",...}}`) for a control request that saves or joins a mesh
+    /// network while the release gate is closed; `nil` for every other request, or when the gate is open.
+    public static func meshGateControlRefusal(_ request: Data, enabled: Bool = MeshSupport.enabled) -> Data? {
+        guard !enabled,
+              let object = (try? JSONSerialization.jsonObject(with: request)) as? [String: Any],
+              let command = object["cmd"] as? String,
+              meshGatedCommands.contains(command)
+        else {
+            return nil
+        }
+        let refusal: [String: Any] = [
+            "ok": false,
+            "error": ["code": "unsupported", "detail": "mesh networks are not available in this version"],
+        ]
+        return try? JSONSerialization.data(withJSONObject: refusal)
+    }
+
+    /// Whether the envelope in `data` has a `"type":"mesh"` entry in `routing.outbounds` (an object of tag to entry,
+    /// or an array of entries). Text that is not a JSON object has none.
+    public static func containsMeshOutbound(_ data: Data) -> Bool {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let routing = root["routing"] as? [String: Any]
+        else {
+            return false
+        }
+        let entries: [Any]
+        switch routing["outbounds"] {
+        case let object as [String: Any]:
+            entries = Array(object.values)
+        case let array as [Any]:
+            entries = array
+        default:
+            return false
+        }
+        return entries.contains { ($0 as? [String: Any])?["type"] as? String == "mesh" }
+    }
 }
 
 extension EmbeddedRuntimeConfig.Mitm {

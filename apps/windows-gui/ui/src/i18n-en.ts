@@ -1051,6 +1051,7 @@ export const english: Record<string, string> = {
   "没有可用的网络：先连上网络，再开启 TUN 模式": "No network is available: connect to a network, then turn on TUN mode.",
   "VPN 没有打开，请重新连接": "The VPN is not on. Connect again.",
   "内核不接受这些规则，检查后再保存": "The core does not accept these rules. Check them and save again.",
+  "此配置包含组网出站，当前版本尚未开放组网。": "This profile contains a mesh outbound; mesh networking is not available in this version.",
   "操作没有完成": "The operation did not finish",
   "断开失败": "Disconnecting failed",
   "重启内核失败": "Restarting the core failed",
