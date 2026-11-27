@@ -444,6 +444,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             return
         }
 
+        // The engine compiles mesh in with no runtime switch: while the release gate is closed a profile with a mesh
+        // outbound (hand-written or imported) is refused, not stripped.
+        if let reason = EmbeddedRuntimeConfig.meshGateFailure(of: config) {
+            events.record("mesh outbound refused: release gate closed")
+            completionHandler(PacketTunnelFailure(reason: reason, fatal: true))
+            return
+        }
+
         let session: EmbeddedRuntimeSession
         do {
             let mitm = MitmProfileBundle.fromProfile(
@@ -551,6 +559,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let session: EmbeddedRuntimeSession
         do {
             let config = EmbeddedRuntimeConfig.meshOnly(meshOutbounds, profileID: Self.meshOnlyProfileID)
+            if let reason = EmbeddedRuntimeConfig.meshGateFailure(of: config) {
+                events.record("mesh outbound refused: release gate closed")
+                completionHandler(PacketTunnelFailure(reason: reason, fatal: true))
+                return
+            }
             session = try EmbeddedRuntimeSession(config: EngineBudget.encoded(config), packetFlow: packetFlow)
         } catch let failure as EmbeddedRuntimeSession.Failure {
             completionHandler(PacketTunnelFailure(
@@ -851,7 +864,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         case .runtimeStatus:
             completionHandler?(session?.statusJSON())
         case let .control(request):
-            completionHandler?(session?.control(withMeshKeys(request)))
+            // While the release gate is closed the engine (mesh compiled in) is asked for no mesh command but stopping.
+            if let refusal = EmbeddedRuntimeConfig.meshGateControlRefusal(request) {
+                completionHandler?(refusal)
+            } else {
+                completionHandler?(session?.control(withMeshKeys(request)))
+            }
         case .trafficStats:
             completionHandler?(trafficStats.snapshot())
         case .clearTrafficStats:

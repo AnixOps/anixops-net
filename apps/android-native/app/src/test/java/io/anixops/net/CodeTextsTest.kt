@@ -38,6 +38,19 @@ class CodeTextsTest {
         assertEquals(emptyList<String>(), codes.filterNot { it in CodeTexts.codes }.sorted())
     }
 
+    /** The mesh release gate's refusal (`crates/client-core` `mesh::GATED_CODE`) is worded, in each language. */
+    @Test
+    fun theMeshGateRefusalHasWordsInEachLanguage() {
+        assertTrue("error.mesh_gated" in CodeTexts.codes)
+        val words = listOf("en", "zh-rCN", "zh-rTW").map { qualifiers ->
+            RuntimeEnvironment.setQualifiers(qualifiers)
+            texts().text("error.mesh_gated", emptyMap())
+        }
+        RuntimeEnvironment.setQualifiers("en")
+        assertTrue(words.all { !it.isNullOrBlank() && it != "error.mesh_gated" })
+        assertEquals(3, words.toSet().size)
+    }
+
     @Test
     fun theWordsAreInEachLanguage() {
         for (qualifiers in listOf("en", "zh-rCN", "zh-rTW")) {

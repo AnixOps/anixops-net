@@ -42,4 +42,21 @@ for file in "${files[@]}"; do
         fi
     done
 done
+
+# The gate that refuses a profile with a mesh outbound while it is closed must still be called by every start path:
+# a deleted call leaves the flags closed and the engine (mesh compiled in) starting it. file|pattern|calls at least.
+checks=(
+    "crates/client-core/src/backend/engine.rs|mesh::refuse_gated_envelope(|2"
+    "apps/windows-gui/src/gui/tun_mode.rs|refuse_gated(envelope)|1"
+    "apps/ios/Sources/NetworkCorePacketTunnel/PacketTunnelProvider.swift|EmbeddedRuntimeConfig.meshGateFailure(of: |2"
+    "apps/ios/Sources/NetworkCorePacketTunnel/PacketTunnelProvider.swift|EmbeddedRuntimeConfig.meshGateControlRefusal(|1"
+)
+for check in "${checks[@]}"; do
+    IFS='|' read -r file pattern least <<< "${check}"
+    calls=$(grep -cF -- "${pattern}" "${file}" || true)
+    if [ "${calls}" -lt "${least}" ]; then
+        echo "::error file=${file}::${file} calls '${pattern}' ${calls} times, expected at least ${least}; the 组网 release gate must guard every engine start."
+        found=1
+    fi
+done
 exit "${found}"

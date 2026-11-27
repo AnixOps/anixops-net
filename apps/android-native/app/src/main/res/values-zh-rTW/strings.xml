@@ -798,6 +798,7 @@
     <string name="code_error_no_default_route">沒有可用的網路：先連上網路，再開啟 TUN 模式</string>
     <string name="code_error_vpn_off">VPN 沒有開啟，請重新連線</string>
     <string name="code_error_rules_rejected">核心不接受這些規則，檢查後再儲存</string>
+    <string name="code_error_mesh_gated">此設定包含目前版本尚未開放的組網設定，請移除後再連線</string>
     <string name="code_config_core_routing_import_rule_skipped">略過了規則</string>
     <string name="code_config_core_routing_import_group_skipped">略過了策略組</string>
     <string name="code_config_core_routing_import_member_skipped">略過了策略組成員</string>

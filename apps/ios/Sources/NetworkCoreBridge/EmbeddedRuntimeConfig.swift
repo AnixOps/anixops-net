@@ -524,6 +524,95 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         encoder.outputFormatting = [.sortedKeys]
         return try encoder.encode(self)
     }
+
+    /// The code of the refusal while the release gate is closed (`MeshSupport.enabled`), the same as client-core's
+    /// `mesh::GATED_CODE`. The extension's English reason starts with it; the app words it in the user's language
+    /// (`isMeshGated`), and a refused control request answers with it.
+    public static let meshGatedCode = "error.mesh_gated"
+
+    /// Why the engine must not start a profile with a mesh outbound while the release gate is closed: the engine
+    /// compiles mesh in with no runtime switch. Nothing is stripped (a rule may name the tag).
+    public static let meshGatedReason = "\(meshGatedCode): this profile contains a mesh outbound; mesh networks are not available in this version"
+
+    /// Whether `text` is the extension's refusal `meshGatedReason` (the failure's description).
+    public static func isMeshGated(_ text: String) -> Bool {
+        text.contains(meshGatedCode + ":")
+    }
+
+    /// The refusal for `data`, the final engine profile; `nil` when it may start.
+    public static func meshGateFailure(_ data: Data, enabled: Bool = MeshSupport.enabled) -> String? {
+        !enabled && containsMeshOutbound(data) ? meshGatedReason : nil
+    }
+
+    /// The refusal for `config`; `nil` when it may start. A config that cannot be encoded to check is refused too:
+    /// the gate fails closed.
+    public static func meshGateFailure(of config: EmbeddedRuntimeConfig, enabled: Bool = MeshSupport.enabled) -> String? {
+        guard !enabled else {
+            return nil
+        }
+        do {
+            return meshGateFailure(try config.encoded(), enabled: enabled)
+        } catch {
+            return meshGatedReason
+        }
+    }
+
+    /// The one control command a closed gate lets through among the `mesh_*` ones: it only releases the mesh engine.
+    static let meshGateAllowedCommand = "mesh_engine_stop"
+
+    /// A refusal (`{"ok":false,"error":{"code":"error.mesh_gated",...}}`) for a control request while the release gate
+    /// is closed: every `mesh_*` command but `mesh_engine_stop` (which of them build the engine is the kernel's to
+    /// change, so none is listed), and a request that names `mesh_` but cannot be read as a command. `nil` for every
+    /// other request, or when the gate is open.
+    public static func meshGateControlRefusal(_ request: Data, enabled: Bool = MeshSupport.enabled) -> Data? {
+        guard !enabled, request.range(of: Data("mesh_".utf8)) != nil else {
+            return nil
+        }
+        if let object = (try? JSONSerialization.jsonObject(with: request)) as? [String: Any],
+           let command = object["cmd"] as? String,
+           !command.hasPrefix("mesh_") || command == meshGateAllowedCommand {
+            return nil
+        }
+        let refusal: [String: Any] = [
+            "ok": false,
+            "error": ["code": meshGatedCode, "detail": "mesh networks are not available in this version"],
+        ]
+        return (try? JSONSerialization.data(withJSONObject: refusal))
+            ?? Data(#"{"ok":false,"error":{"code":"error.mesh_gated"}}"#.utf8)
+    }
+
+    /// Whether the envelope in `data` builds a mesh outbound, where the kernel builds one: the top-level `outbound`,
+    /// every entry of `routing.outbounds` (an object of tag to entry, or an array of entries), and the inline `via`
+    /// objects of either, however deep. Text that is not a JSON object has none.
+    public static func containsMeshOutbound(_ data: Data) -> Bool {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return false
+        }
+        if let outbound = root["outbound"], entryIsMesh(outbound) {
+            return true
+        }
+        let entries: [Any]
+        switch (root["routing"] as? [String: Any])?["outbounds"] {
+        case let object as [String: Any]:
+            entries = Array(object.values)
+        case let array as [Any]:
+            entries = array
+        default:
+            return false
+        }
+        return entries.contains(where: entryIsMesh)
+    }
+
+    /// An outbound entry of type `mesh`, or whose inline `via` chain holds one.
+    private static func entryIsMesh(_ entry: Any) -> Bool {
+        guard let object = entry as? [String: Any] else {
+            return false
+        }
+        if object["type"] as? String == "mesh" {
+            return true
+        }
+        return object["via"].map(entryIsMesh) ?? false
+    }
 }
 
 extension EmbeddedRuntimeConfig.Mitm {
