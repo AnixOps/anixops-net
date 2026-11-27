@@ -13,6 +13,7 @@ struct NetworkCoreMacApp: App {
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
 
     init() {
+        EngineCapabilities.install()
         ClientHealthMonitor.shared.start()
         AppNotifications.install()
     }

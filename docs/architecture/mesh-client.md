@@ -12,7 +12,7 @@
 | 1.2 | 0.4 | 地区分组与归属依据、迁区建议与申请（R24）、边界与宿主组（组地址段，R21、R26）、地址分配（固定 / 自动）、其他地区与骨干的可达状态（R19）、外部网络（R36） |
 | 1.3 | 0.5 | 自定义路径与回落提示、个人电脑用入网凭据加入 |
 
-内核没有组网能力（`capabilities.mesh` 不存在或为 `false`）时，各平台不显示组网入口。版本内尚未提供的字段缺省即可，
+内核没有组网能力（`capabilities.mesh` 不存在或为 `false`，见「发布闸门」）时，各平台不显示组网入口。版本内尚未提供的字段缺省即可，
 界面按缺省值降级：没有 `regions` 时成员不分组，没有 `links` 时路径页不显示跨区链路，没有 `paths` 时不显示自定义路径。
 
 ## 读取：状态快照
@@ -184,7 +184,7 @@
 各平台的通道（命令名在三条通道上相同，未编进组网时返回 `unsupported`）：
 
 - iOS、macOS：组网与代理共用一个 VPN 和一个引擎实例，命令走现有的 `networkcore_ios_runtime_control`，
-  请求体 `{ "cmd": "mesh_status", … }`；引擎带组网时 `networkcore_ios_feature_set_version` 为 7。
+  请求体 `{ "cmd": "mesh_status", … }`；`networkcore_ios_feature_set_version` 为 7，与是否带组网无关；组网是否可用问引擎（`capabilities.mesh`，见发布闸门）。
   App 经 NetworkExtension 消息转发。
 - Android：JNI 桥转到 `client-core` 的同名命令。
 - Windows、Linux：窗口经 `client-ipc` 帧发同名命令到后台服务。
@@ -213,7 +213,7 @@
 - iOS、macOS 只开组网：代理断开而有网络已加入时，隧道配置标记 `networkcore.mesh-only`，VPN 重启为只带组网出站的配置
   （`rules` 为 `["FINAL,DIRECT"]`，`mode` 为 `rule`，不需要节点密钥）；`includedRoutes` 只放 `tunnel.routes`，
   内网域名开启时 DNS 只对 `tunnel.dns.matchDomains` 生效。扩展每 2 秒读一次 `mesh_status`，`routesVersion` 变化时重新应用，
-  间隔至少 1 秒。代理连上时去掉标记并重启；退出最后一个网络时关闭 VPN。入口在 `feature_set_version` ≥ 7 时显示。
+  间隔至少 1 秒。代理连上时去掉标记并重启；退出最后一个网络时关闭 VPN。入口在 `MeshSupport.available`（发布门打开且引擎回答 `capabilities.mesh` 为 `true`）时显示。
 - Android 只开组网：代理断开（或连接失败、Wi-Fi 规则断开）而有网络已加入时，`client-core` 不关 VPN，改为以只带组网的接口
   重新打开（地址与 MTU 同代理，起初没有路由），再在该描述符上启动只带组网出站的引擎（`rules` 为 `["FINAL,DIRECT"]`），
   与代理引擎分开，连接状态仍为未连接。每 2 秒读一次 `mesh_status`，接口所需的路由或 DNS 变化时重新打开接口，间隔至少 1 秒；
@@ -305,7 +305,36 @@
   `via` 对象（递归）。拒绝不删除（规则可能引用该 tag），错误码固定为 `error.mesh_gated`，各端自行用本地语言措辞，不含配置内容。
   每个启动入口都调用同一道门：client-core 的 `Engine::start` 与 `MeshOnly::start`（安卓、Linux、Windows 原生）、Windows 桌面端的
   `DesktopTun::start_with`（TUN 模式与仅组网）、Apple 扩展的 `launchTunnel` 与 `beginMeshOnly`；被拒绝的重启先停掉旧引擎，不留旧连接；
-  按需连接把它当作不可重试的失败。门检查的调用点由 `mesh-release-gate.sh` 断言存在。
+  按需连接把它当作不可重试的失败。门检查的调用点由 `mesh-release-gate.sh` 断言存在。Windows 桌面的系统代理模式（本地代理）同样拒绝
+  （`start_embedded`），与 TUN 模式一致。内联 `via` 的递归最多跟 64 层，更深的按「含组网」处理（内核本来就拒绝超过 4 层的链）。
+- 内核层的第二道门（内核固定在 v0.3.0-rc.2（`ce0cb5765a0aeb94845c0cfef9d71bbf39ba028e`，release/0.3），core#424、#425）：内核的信封字段
+  `allow_mesh`（布尔，缺省 `false`）为 `false` 或缺省时，`RuntimeConfig::from_json` 以 `config_rejected`、固定消息
+  `mesh outbounds are not allowed by this config` 拒绝任何位置的组网出站，该运行实例 `capabilities.mesh` 为 `false`，所有
+  `mesh_*` 命令返回 `unsupported`。两层都保留，不得以「内核已有开关」为由删掉客户端门：客户端门先拒绝，保证各端错误码都是
+  `error.mesh_gated`、文案一致；`allow_mesh` 覆盖客户端解析与内核解析的差异（审计 #351 L-f）、将来的新入口和新的出站构建位置。
+  交给引擎的每一份最终信封都带 `"allow_mesh": <发布门是否打开>`（client-core 为 `mesh::ENABLED`，Apple 为 `MeshSupport.enabled`），
+  用户手写或导入的配置里的 `allow_mesh` 一律被覆盖，不存在写死 `true` 的位置：client-core 的 `mesh::with_allow_mesh`
+  （文本与字节形式，`Engine::start`、`MeshOnly::start`、`through_temporary_proxy`、Windows 桌面的 `DesktopTun::start_with` 与本地代理的
+  `start_embedded`）；Apple 的 `EmbeddedRuntimeConfig.withAllowMesh()`，由 `EngineBudget.encoded` 统一调用，扩展里每一次交给引擎的编码都经过它。
+  带取值的变体（Rust 的 `prepared_start`、`allow_mesh_text`、`start_gated`、`through_proxy_gated`，Swift 的 `settingAllowMesh`、`MeshSupport.available(enabled:)`）
+  不公开（Rust 最多 `pub(crate)`，Swift 为 internal，测试用 `@testable import`），调用方只能走绑定发布门的包装；测试用它们验证门打开时 `true` 确实到达引擎信封。
+  信封无法解析而含 `mesh` 时，发布门关闭则拒绝，但按「配置无效」报（无错误码的普通英文），不报 `error.mesh_gated`。client-core 与 Windows 中
+  内核自己的 `MESH_NOT_ALLOWED` 拒绝映射为同一条 `error.mesh_gated` 文案（`map_kernel_refusal`）；Apple 不映射：C ABI 的
+  `networkcore_ios_runtime_init` 只返回 `CONFIG_REJECTED` 而不带消息，漏过客户端门的配置在 Apple 上显示为通用的「配置被拒绝」。
+  只做校验的 `from_json`（保存 DNS、规则、数据列表、设备名、重定向，Windows 的「检查配置」）经 `mesh::check_envelope`，同样写入 `allow_mesh`。
+  Windows 的本地代理模式与 client-core 的本地代理不带组网（`capabilities.mesh` 恒为 `false`）：运行的引擎是本地代理时，`mesh_*` 答
+  `unsupported`（`Backend::runtime_control` 的捷径，引擎自己也这样答）；`Backend::mesh_supported` 只在没有引擎运行时被问到，那时等于 `mesh::supported()`。
+  `mesh-release-gate.sh` 断言各启动文件里这些调用都在预期的函数内（不计注释行），锁定两处写入点的取值（`set_allow_mesh(config, ENABLED)`、
+  Swift 的 `settingAllowMesh(MeshSupport.enabled)`），并在非测试源码里拦截把 `allow_mesh` 写成 `true` 的字面写法（同一行出现 `allow_mesh`、`allowMesh` 或 `AllowMesh` 与单词 `true`，含带参数的助手、
+  `Value::Bool(true)`、下标赋值与转义的 JSON 文本）。拦不住的是变量传值、`!false`、常量、宏、折行的 `insert`、改名的 serde 字段；所以脚本另外按整个仓库
+  统计各写入助手（`allow_mesh_text`、`prepared_start`、`check_envelope`、`withAllowMesh` 等）在非测试代码里的调用次数，要求与清单**恰好相等**，新增启动路径必须同时改脚本。
+  测试代码的边界以脚本为准：Rust 跳过每个 `#[cfg(test)]` 条目（`mod`、`use`、`fn`、`impl`），从该条目起到与它配对的右花括号（无花括号的到分号）为止，
+  花括号在字符串和注释之外计数，之后的生产代码照常扫描；`#![cfg(test)]` 的文件整个跳过。Swift、Kotlin、TypeScript 不按条目区分，只排除路径中含
+  `test`、`tests`、`Tests`、`androidTest` 的目录。行尾 `//` 注释在字符串字面量之外才剥离（只认单行的 `"..."`，TypeScript 另认 `'...'`；原始字符串与跨行字符串不处理）。
+- 组网是否可用由引擎回答，不由特性集版本推断：内核固定后 `networkcore_ios_feature_set_version` 为 7，且不随 `mesh` feature 变化。Apple 的
+  `MeshSupport.available` 为 `enabled`（发布门）且引擎对 `{"cmd":"capabilities"}` 回答 `capabilities.mesh` 为 `true`；应用在启动时
+  （`EngineCapabilities.install`）装上探测：在应用进程内以带发布门 `allow_mesh` 的最小配置建一个不启动的运行时，在后台线程问，成功的回答才缓存，失败（无应答或不是应答）不缓存，之后的读取隔 5 秒再问；不在主线程等引擎。
+  client-core 与引擎同进程，`mesh::supported()` 用同一份配置解析探测（带发布门 `allow_mesh` 的仅组网配置能否被引擎构建）。
 - 发布门关闭时，Apple 扩展的控制通道拒绝除 `mesh_engine_stop` 以外的所有 `mesh_*` 命令，请求含 `mesh_` 而无法解析时同样拒绝，答
   `error.mesh_gated`；client-core 的窗口请求在 `activity_request` 中同样拒绝所有 `mesh_*`。
 - 解除闸门：内核线程确认内核 0.3 完成并通过审计后，随下一次内核固定一起修改。

@@ -51,6 +51,7 @@ use desktop_dns::redirects::{
     Draft as RedirectDraft, Entry as RedirectEntry, Redirects, View as Redirect,
 };
 use desktop_mitm::Root;
+#[cfg(test)]
 use engine_embedded::config::RuntimeConfig;
 use engine_embedded::profile;
 use node_edits::{NodeEdits, NodeForm};
@@ -633,9 +634,17 @@ impl Backend {
     /// network is joined and this build's engine runs mesh networks.
     pub fn wants_mesh_only(&self) -> bool {
         !self.engine.is_running()
-            && mesh::supported()
+            && self.mesh_supported()
             && mesh::load(self.store.dir())
                 .is_ok_and(|networks| networks.iter().any(|network| network.joined))
+    }
+
+    /// Whether mesh networks run here now: this build's engine runs them ([`mesh::supported`]) and the engine that
+    /// runs, if one does, carries them (the local proxy does not, as `capabilities.mesh` says). Both callers
+    /// ([`Self::wants_mesh_only`], [`Self::mesh_control`]) ask only while no engine runs, where this is
+    /// `mesh::supported()`; the running-engine clause is a safeguard for a caller that asks otherwise.
+    pub fn mesh_supported(&self) -> bool {
+        mesh::supported() && (!self.engine.is_running() || self.engine.carries_mesh())
     }
 
     pub fn mesh_only_running(&self) -> bool {
@@ -737,10 +746,10 @@ impl Backend {
                 let envelope = desktop_dns::apply(&envelope, self.state.dns_preset)?;
                 let envelope = desktop_dns::apply_block_quic(&envelope, self.state.block_quic)?;
                 let envelope = desktop_dns::redirects::apply(&envelope)?;
-                RuntimeConfig::from_json(envelope.as_bytes()).map_err(|error| {
+                mesh::check_envelope(&envelope, |error| {
                     refusal::coded(
                         "error.rules_rejected",
-                        format!("the engine rejected the rules: {}", error.message),
+                        format!("the engine rejected the rules: {error}"),
                     )
                 })?;
                 Some(envelope)
@@ -1323,8 +1332,8 @@ impl Backend {
             // Without a profile there is nothing to check the settings against yet.
             if self.envelope_with_rules(&[]).is_ok() {
                 let envelope = self.envelope()?;
-                RuntimeConfig::from_json(envelope.as_bytes()).map_err(|error| {
-                    format!("the engine rejected the DNS settings: {}", error.message)
+                mesh::check_envelope(&envelope, |error| {
+                    format!("the engine rejected the DNS settings: {error}")
                 })?;
             }
             Ok(())
@@ -1454,8 +1463,8 @@ impl Backend {
         let restarted = desktop_dns::data_sources::replace(next, || {
             if self.envelope_with_rules(&[]).is_ok() {
                 let envelope = self.envelope()?;
-                RuntimeConfig::from_json(envelope.as_bytes()).map_err(|error| {
-                    format!("the engine rejected the data lists: {}", error.message)
+                mesh::check_envelope(&envelope, |error| {
+                    format!("the engine rejected the data lists: {error}")
                 })?;
             }
             self.restart_if_running()
@@ -1498,8 +1507,8 @@ impl Backend {
         let restarted = desktop_dns::devices::replace(next, || {
             if self.envelope_with_rules(&[]).is_ok() {
                 let envelope = self.envelope()?;
-                RuntimeConfig::from_json(envelope.as_bytes()).map_err(|error| {
-                    format!("the engine rejected the device names: {}", error.message)
+                mesh::check_envelope(&envelope, |error| {
+                    format!("the engine rejected the device names: {error}")
                 })?;
             }
             self.restart_if_running()
@@ -1547,8 +1556,8 @@ impl Backend {
         let restarted = desktop_dns::redirects::replace(next, || {
             if self.envelope_with_rules(&[]).is_ok() {
                 let envelope = self.envelope()?;
-                RuntimeConfig::from_json(envelope.as_bytes()).map_err(|error| {
-                    format!("the engine rejected the redirects: {}", error.message)
+                mesh::check_envelope(&envelope, |error| {
+                    format!("the engine rejected the redirects: {error}")
                 })?;
             }
             self.restart_if_running()
@@ -2068,6 +2077,16 @@ impl Backend {
             if let Some(answer) = self.mesh_control(request) {
                 return answer;
             }
+        } else if !self.engine.carries_mesh()
+            && request
+                .get("cmd")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|command| command.starts_with("mesh_"))
+        {
+            // A running local proxy carries no mesh: answer `unsupported` here, the same code the engine itself gives,
+            // without asking it. A redundant guard (the engine answers the same), pinned by
+            // `a_running_local_proxy_answers_mesh_commands_unsupported`.
+            return Ok(serde_json::json!({ "ok": false, "error": { "code": "unsupported" } }));
         }
         self.engine.control(request)
     }
@@ -2096,7 +2115,7 @@ impl Backend {
                     }),
             );
         }
-        if command == "mesh_status" && mesh::supported() {
+        if command == "mesh_status" && self.mesh_supported() {
             return Some(
                 mesh::load(self.store.dir()).map(|networks| mesh::offline_status(&networks)),
             );
@@ -3054,6 +3073,37 @@ mod tests {
         backend.set_https_decryption(false).unwrap();
         assert!(!backend.envelope().unwrap().contains("\"mitm\""));
         assert!(backend.mitm_root().exists());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A running local proxy carries no mesh: `mesh_*` window requests get `unsupported` (the shortcut in
+    /// `runtime_control`), the mesh entry does not follow it, and other commands still reach the engine.
+    #[test]
+    fn a_running_local_proxy_answers_mesh_commands_unsupported() {
+        use serde_json::json;
+
+        let (mut backend, dir) = backend("proxy-mesh-unsupported");
+        backend.set_direct_egress(true).unwrap();
+        backend.state.listen_port = 0;
+        backend
+            .connect()
+            .expect("the engine starts on the node-less profile");
+        assert!(backend.engine.is_running());
+        assert!(!backend.engine.carries_mesh());
+        assert!(!backend.mesh_supported());
+        for command in ["mesh_status", "mesh_join", "mesh_leave"] {
+            let answer = backend.runtime_control(&json!({ "cmd": command })).unwrap();
+            assert_eq!(answer["ok"], false, "{command}: {answer}");
+            assert_eq!(
+                answer["error"]["code"], "unsupported",
+                "{command}: {answer}"
+            );
+        }
+        let status = backend
+            .runtime_control(&json!({ "cmd": "capture" }))
+            .unwrap();
+        assert!(status.get("enabled").is_some(), "{status}");
+        backend.engine.stop();
         let _ = std::fs::remove_dir_all(dir);
     }
 

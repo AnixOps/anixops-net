@@ -64,6 +64,18 @@ final class MeshModel {
     private(set) var busy = false
     /// The networks saved on this device (`MeshNetworkLibrary`).
     private(set) var saved = MeshNetworkLibrary.load()
+    /// Counts the engine's answers to the capabilities probe (`MeshSupport.availabilityDidChange`): `shown` reads it, so
+    /// the entry is read again once the first answer arrives, which `MeshSupport.available` itself cannot announce.
+    private(set) var availabilityVersion = 0
+
+    init() {
+        // The block holds the model weakly; the observer itself lives as long as the process (a handful of models).
+        NotificationCenter.default.addObserver(
+            forName: MeshSupport.availabilityDidChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.availabilityVersion += 1 }
+        }
+    }
 
     /// The snapshot the entry and page show: the engine's while it runs; otherwise, with an engine that runs mesh
     /// networks, one made from the saved networks (the joined one, else the first), without members.
@@ -71,6 +83,7 @@ final class MeshModel {
         if let status {
             return status
         }
+        _ = availabilityVersion
         guard MeshSupport.available else {
             return nil
         }
@@ -429,6 +442,10 @@ enum MeshText {
             return String(localized: "操作未完成：网络不存在。")
         case "not_allowed":
             return String(localized: "操作未完成：网络不允许此操作。")
+        case "instance_id_changed":
+            return String(localized: "无法加入：本机实例标识已变更，请重新加入。")
+        case "engine_unavailable":
+            return String(localized: "操作未完成：组网引擎未运行。")
         default:
             return String(localized: "操作未完成。")
         }

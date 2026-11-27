@@ -79,11 +79,18 @@ final class MeshTunnelTests: XCTestCase {
         XCTAssertNil(MeshNetwork(name: "a", config: "[]", joined: true).security)
     }
 
-    func testMeshNeedsTheReleaseGateAndFeatureSetSeven() {
-        XCTAssertEqual(MeshSupport.available, MeshSupport.enabled && NetworkCoreRuntimeFFI.featureSetVersion >= 7)
+    func testMeshNeedsTheReleaseGateAndTheEnginesCapability() {
+        // An engine that runs mesh (a probe that answers so) turns it on only with the release gate open, in either build;
+        // `MeshGateTests` runs both values of the gate through `available(enabled:)`.
+        MeshSupport.installCapabilitiesProbe { Data(#"{"capabilities":{"mesh":true}}"#.utf8) }
+        defer { MeshSupport.installCapabilitiesProbe { nil } }
+        XCTAssertEqual(MeshSupport.askEngine(), true)
+        // The release gate is closed in a normal build; only the `MESH_PREVIEW` test step opens it.
         #if !MESH_PREVIEW
-        // Until kernel 0.3 is complete and audited, no engine turns 组网 on by itself.
-        XCTAssertFalse(MeshSupport.available)
+        XCTAssertFalse(MeshSupport.enabled)
         #endif
+        XCTAssertEqual(MeshSupport.available, MeshSupport.enabled)
+        XCTAssertTrue(MeshSupport.available(enabled: true))
+        XCTAssertFalse(MeshSupport.available(enabled: false))
     }
 }

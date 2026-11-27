@@ -757,6 +757,10 @@ export function failureText(code: string | null | undefined): string {
       return t("操作未完成：网络不存在。");
     case "not_allowed":
       return t("操作未完成：网络不允许此操作。");
+    case "instance_id_changed":
+      return t("无法加入：本机实例标识已变更，请重新加入。");
+    case "engine_unavailable":
+      return t("操作未完成：组网引擎未运行。");
     default:
       return t("操作未完成。");
   }

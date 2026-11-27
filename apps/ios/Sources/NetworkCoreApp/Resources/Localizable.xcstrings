@@ -6184,13 +6184,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This profile contains mesh settings that this version does not support. Remove them and connect again."
+            "value": "This profile contains mesh settings that are not yet available in this version. Remove them and connect again."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "此設定包含目前版本尚未開放的組網設定，請移除後再連線。"
+            "value": "此設定檔包含目前版本尚未開放的組網項目，請移除後再連線。"
           }
         }
       }
@@ -21845,6 +21845,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "操作未完成：參數無效。"
+          }
+        }
+      }
+    },
+    "无法加入：本机实例标识已变更，请重新加入。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cannot join: this device's instance ID changed. Join again."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法加入：本機實例識別碼已變更，請重新加入。"
+          }
+        }
+      }
+    },
+    "操作未完成：组网引擎未运行。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Operation not completed: the mesh engine is not running."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "操作未完成：組網引擎未執行。"
           }
         }
       }

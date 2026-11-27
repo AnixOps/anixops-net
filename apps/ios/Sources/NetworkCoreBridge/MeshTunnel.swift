@@ -1,9 +1,127 @@
 import Foundation
 
-/// Whether this build runs mesh networks: `enabled`, and an engine of feature set 7 or later (mesh-status.md).
-/// The app shows the 组网 entry from it, whether the tunnel runs or not.
+/// Whether this build runs mesh networks: `enabled`, and an engine that answers `capabilities.mesh` (mesh-status.md).
+/// The feature set does not tell: from kernel v0.3.0-rc.2 (the pinned ce0cb576) it is 7 with or without the `mesh` feature. The app shows
+/// the 组网 entry from it, whether the tunnel runs or not.
 public enum MeshSupport {
-    public static let minimumFeatureSet: UInt32 = 7
+    /// The control request that asks an engine what it can do.
+    public static let capabilitiesRequest = Data(#"{"cmd":"capabilities"}"#.utf8)
+
+    /// Whether the answer to `capabilitiesRequest` (`{"capabilities":{"mesh":bool}}`) says the engine runs mesh.
+    /// No answer, a refusal or anything else is no.
+    public static func runsMesh(capabilitiesAnswer data: Data?) -> Bool {
+        meshCapability(capabilitiesAnswer: data) ?? false
+    }
+
+    /// What the answer says of mesh: `true` or `false` from `{"capabilities":{"mesh":bool}}`, `false` from the engine's
+    /// own refusal (`{"ok":false,...}`: an engine that does not know the command), and `nil` for no answer or one that
+    /// is not an answer at all, which may be asked again.
+    static func meshCapability(capabilitiesAnswer data: Data?) -> Bool? {
+        guard let data,
+              let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else {
+            return nil
+        }
+        if let capabilities = object["capabilities"] as? [String: Any],
+           let mesh = capabilities["mesh"] as? NSNumber {
+            return mesh.boolValue
+        }
+        return object["ok"] as? Bool == false ? false : nil
+    }
+
+    private static let probeLock = NSLock()
+    private static var probe: (() -> Data?)?
+    /// The engine's answer, kept once it was one; a failed probe is not kept.
+    private static var probed: Bool?
+    private static var probing = false
+    private static var retryAfter = Date.distantPast
+    /// Counts the installs: a probe that was asked before the latest install answers into nothing (its answer is
+    /// returned to its caller, never kept), so a late answer cannot overwrite what a newer install has cached.
+    private static var generation = 0
+    /// How long after a failed probe the next read asks again.
+    static let retryDelay: TimeInterval = 5
+    /// Posted (on the thread that got the answer) when the engine's answer to the capabilities probe arrives or
+    /// changes, so what reads `available` can read it again: the first read answers no while the engine is asked in
+    /// the background.
+    public static let availabilityDidChange = Notification.Name("MeshSupport.availabilityDidChange")
+
+    /// The install the current probe belongs to (for tests of a stale answer).
+    static var probeGeneration: Int {
+        probeLock.lock()
+        defer { probeLock.unlock() }
+        return generation
+    }
+
+    /// Installs how the app asks an engine for its capabilities: the answer to `capabilitiesRequest` from an engine
+    /// built with the release gate's `allow_mesh` (the Bridge links no engine). Until then no engine runs mesh. With
+    /// the gate open it asks at once, off the calling thread.
+    public static func installCapabilitiesProbe(_ probe: @escaping () -> Data?) {
+        probeLock.lock()
+        self.probe = probe
+        generation += 1
+        probed = nil
+        probing = false
+        retryAfter = .distantPast
+        probeLock.unlock()
+        // A build with the gate closed never asks an engine (`available` short-circuits).
+        if enabled {
+            _ = engineRunsMesh
+        }
+    }
+
+    /// Whether the engine this build links answers `capabilities.mesh`. Never waits for the engine: the first reads (and
+    /// any read after a failed probe, five seconds on) answer no and ask in the background; a successful answer is kept
+    /// for good, a failed one is asked again later.
+    static var engineRunsMesh: Bool {
+        probeLock.lock()
+        defer { probeLock.unlock() }
+        if let probed {
+            return probed
+        }
+        if let probe, !probing, Date() >= retryAfter {
+            probing = true
+            let generation = self.generation
+            DispatchQueue.global(qos: .utility).async { _ = askEngine(probe: probe, generation: generation) }
+        }
+        return false
+    }
+
+    /// Asks the installed probe now, on the calling thread, and keeps the answer if it is one. `nil` when it is not (or
+    /// no probe is installed), and the next read asks again after `retryDelay`. The lock is not held while the engine
+    /// answers.
+    @discardableResult
+    static func askEngine() -> Bool? {
+        probeLock.lock()
+        let probe = self.probe
+        let generation = self.generation
+        probeLock.unlock()
+        return askEngine(probe: probe, generation: generation)
+    }
+
+    /// Asks `probe`, which was installed as `generation`; the answer is kept only while that is still the latest
+    /// install.
+    @discardableResult
+    static func askEngine(probe: (() -> Data?)?, generation: Int) -> Bool? {
+        let answer = probe.flatMap { meshCapability(capabilitiesAnswer: $0()) }
+        probeLock.lock()
+        guard generation == self.generation else {
+            probeLock.unlock()
+            return answer
+        }
+        probing = false
+        var changed = false
+        if let answer {
+            changed = probed != answer
+            probed = answer
+        } else {
+            retryAfter = Date().addingTimeInterval(retryDelay)
+        }
+        probeLock.unlock()
+        if changed {
+            NotificationCenter.default.post(name: availabilityDidChange, object: nil)
+        }
+        return answer
+    }
 
     /// Whether this build offers 组网 at all. Off until kernel 0.3 is complete and audited, whatever the engine
     /// runs: the release gate, not a capability (the same as client-core's `mesh::ENABLED`). A build with the
@@ -25,7 +143,12 @@ public enum MeshSupport {
     #endif
 
     public static var available: Bool {
-        enabled && NetworkCoreRuntimeFFI.featureSetVersion >= minimumFeatureSet
+        available(enabled: enabled)
+    }
+
+    /// [`available`] with the gate as a value, for tests; `available` passes the release gate.
+    static func available(enabled: Bool) -> Bool {
+        enabled && engineRunsMesh
     }
 }
 

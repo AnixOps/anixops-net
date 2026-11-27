@@ -439,8 +439,9 @@ impl MeshOnly {
     pub fn start(&mut self, envelope: &str) -> Result<(), String> {
         // A refused start still stops the one that runs: no stale engine stays behind the error.
         self.stop();
-        super::mesh::refuse_gated_envelope(envelope)?;
-        self.tunnel = Some(TunEngine::start(envelope)?);
+        // The client's own gate, then the engine's: `allow_mesh` is the release gate in every envelope it gets.
+        let envelope = super::mesh::start_envelope(envelope)?;
+        self.tunnel = Some(TunEngine::start(&envelope).map_err(super::mesh::map_kernel_refusal)?);
         Ok(())
     }
 
@@ -505,13 +506,31 @@ impl Engine {
         node_id: &str,
         port: u16,
     ) -> Result<SocketAddr, String> {
+        self.start_gated(envelope, node_id, port, super::mesh::ENABLED)
+    }
+
+    /// [`Engine::start`] with the mesh release gate as a value, so that a test sees both values reach the engine.
+    /// Only `start` calls it, with the release gate.
+    pub(crate) fn start_gated(
+        &mut self,
+        envelope: &str,
+        node_id: &str,
+        port: u16,
+        open: bool,
+    ) -> Result<SocketAddr, String> {
         // A refused start still stops the engine that runs: no stale engine stays behind the error.
         self.stop_runtime();
-        if let Err(refusal) = super::mesh::refuse_gated_envelope(envelope) {
-            self.node_id = None;
-            return Err(refusal);
-        }
-        let address = self.start_runtime(envelope, port)?;
+        // The client's own gate, then the engine's: `allow_mesh` is the release gate in every envelope it gets.
+        let envelope = match super::mesh::prepared_start(envelope, open) {
+            Ok(envelope) => envelope,
+            Err(refusal) => {
+                self.node_id = None;
+                return Err(refusal);
+            }
+        };
+        let address = self
+            .start_runtime(&envelope, port)
+            .map_err(super::mesh::map_kernel_refusal)?;
         self.node_id = Some(node_id.to_string());
         // The lists read the new engine now; a session the viewer held after the last stop is let go.
         desktop_mitm::sessions::close_viewer();
@@ -569,6 +588,12 @@ impl Engine {
 
     pub fn is_running(&self) -> bool {
         self.tunnel_running() || self.proxy_running()
+    }
+
+    /// Whether the running engine carries mesh networks: one on a TUN interface does, the local proxy never does (its
+    /// `capabilities.mesh` is false and it answers every `mesh_*` command with `unsupported`).
+    pub fn carries_mesh(&self) -> bool {
+        self.tunnel_running()
     }
 
     #[cfg(any(target_os = "android", target_os = "linux", windows))]
@@ -723,9 +748,21 @@ pub fn through_temporary_proxy<T>(
     envelope: &str,
     probe: impl FnOnce(u16) -> T,
 ) -> Result<T, String> {
+    through_proxy_gated(envelope, super::mesh::ENABLED, probe)
+}
+
+/// [`through_temporary_proxy`] with the mesh release gate as a value (a test's). The running envelope may hold a mesh
+/// outbound while the gate is open, so the probe's own engine needs `allow_mesh` true then.
+pub(crate) fn through_proxy_gated<T>(
+    envelope: &str,
+    open: bool,
+    probe: impl FnOnce(u16) -> T,
+) -> Result<T, String> {
     let listen = SocketAddr::from((Ipv4Addr::LOCALHOST, 0));
+    let envelope = super::mesh::allow_mesh_text(envelope, open)?;
     let mut proxy = LocalProxy::start(envelope.as_bytes(), listen, MixedSettings::default())
-        .map_err(|error| error.message.to_string())?;
+        .map_err(|error| error.message.to_string())
+        .map_err(super::mesh::map_kernel_refusal)?;
     let result = probe(proxy.local_addr().port());
     proxy.stop();
     Ok(result)

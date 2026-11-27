@@ -837,7 +837,7 @@
     <string name="code_error_no_default_route">No network is available: connect to a network, then turn on TUN mode.</string>
     <string name="code_error_vpn_off">The VPN is not on. Connect again.</string>
     <string name="code_error_rules_rejected">The core does not accept these rules. Check them and save again.</string>
-    <string name="code_error_mesh_gated">This profile contains mesh settings that this version does not support. Remove them and connect again.</string>
+    <string name="code_error_mesh_gated">This profile contains mesh settings that are not yet available in this version. Remove them and connect again.</string>
     <string name="code_config_core_routing_import_rule_skipped">Rule skipped</string>
     <string name="code_config_core_routing_import_group_skipped">Policy group skipped</string>
     <string name="code_config_core_routing_import_member_skipped">Policy group member skipped</string>
@@ -977,6 +977,8 @@
     <string name="mesh_failure_invalid">Operation not completed: invalid argument.</string>
     <string name="mesh_failure_not_found">Operation not completed: the network does not exist.</string>
     <string name="mesh_failure_not_allowed">Operation not completed: the network does not allow it.</string>
+    <string name="mesh_failure_instance_changed">Cannot join: this device\'s instance ID changed. Join again.</string>
+    <string name="mesh_failure_engine_unavailable">Operation not completed: the mesh engine is not running.</string>
     <string name="mesh_failure_other">Operation not completed.</string>
     <string name="mesh_notice_path_fallback">Custom path fell back: %1$s is unreachable. %2$s uses the default path.</string>
     <string name="mesh_notice_path_unsupported">Custom path fell back: %1$s does not forward on this path. %2$s uses the default path.</string>

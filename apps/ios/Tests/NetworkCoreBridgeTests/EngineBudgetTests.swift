@@ -13,7 +13,7 @@ final class EngineBudgetTests: XCTestCase {
     /// that reason instead of a bare refusal.
     func testConfigsOverTheEnginesLimitAreMeasuredBeforeTheEngineSeesThem() throws {
         XCTAssertEqual(EngineBudget.maxConfigBytes, 64 * 1024)
-        XCTAssertEqual(try EngineBudget.encoded(base), try base.encoded())
+        XCTAssertEqual(try EngineBudget.encoded(base), try base.withAllowMesh().encoded())
 
         // Two plugins of 40 KB: each fits the decryption budget, together the config does not fit.
         let plugin = "#!name=big\n[Rewrite]\n" + String(repeating: "^https://a\\.example/x reject\n", count: 1400)
@@ -22,7 +22,7 @@ final class EngineBudgetTests: XCTestCase {
         XCTAssertThrowsError(try EngineBudget.encoded(decrypting)) { error in
             let tooLarge = error as? EngineBudget.TooLarge
             XCTAssertEqual(tooLarge?.limit, EngineBudget.maxConfigBytes)
-            XCTAssertEqual(tooLarge?.bytes, try? decrypting.encoded().count)
+            XCTAssertEqual(tooLarge?.bytes, try? decrypting.withAllowMesh().encoded().count)
         }
         XCTAssertNoThrow(try EngineBudget.encoded(decrypting.withoutMitm()))
 
