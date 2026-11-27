@@ -96,6 +96,11 @@ class BuildTest(unittest.TestCase):
         self.assertIn("最新正式版", page)
         self.assertIn("<h2>测试版</h2>", page)
 
+    def test_page_states_the_client_is_not_offered_in_mainland_china(self):
+        page = self.read_text(os.path.join(self.build([release("v1.0.0")]), "index.html"))
+        self.assertIn("本软件不向中国大陆提供。", page)
+        self.assertIn("https://github.com/AnixOps/anixops-net/blob/main/TERMS.md", page)
+
     def test_only_prereleases_labels_the_test_version(self):
         out = self.build([release("v0.3.0-beta.11", True)])
         latest = self.read_json(os.path.join(out, "latest.json"))
