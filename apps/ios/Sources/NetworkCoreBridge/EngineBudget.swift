@@ -29,9 +29,10 @@ public enum EngineBudget {
     }
 
     /// `config` as the engine gets it (`EmbeddedRuntimeConfig.encoded()`), or `TooLarge` when the engine would
-    /// refuse it for its size.
+    /// refuse it for its size. Every config the extension hands the engine goes through here, so each carries
+    /// `allow_mesh` set to the release gate (`withAllowMesh`).
     public static func encoded(_ config: EmbeddedRuntimeConfig) throws -> Data {
-        let data = try config.encoded()
+        let data = try config.withAllowMesh().encoded()
         guard data.count <= maxConfigBytes else {
             throw TooLarge(bytes: data.count, limit: maxConfigBytes)
         }

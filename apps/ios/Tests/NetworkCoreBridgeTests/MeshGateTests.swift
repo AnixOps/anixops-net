@@ -71,22 +71,115 @@ final class MeshGateTests: XCTestCase {
         XCTAssertNil(EmbeddedRuntimeConfig.meshGateControlRefusal(data("not json"), enabled: false))
     }
 
-    /// The start paths of the extension call the gate: removing a call fails here (the extension is not a test
-    /// target, so its source is read).
-    func testTheTunnelStartsAndTheControlPathCallTheGate() throws {
+    func testAnInlineViaChainDeeperThanTheCapIsTreatedAsMesh() throws {
+        func chain(depth: Int, last: String) -> Data {
+            var entry = last
+            for _ in 0..<depth {
+                entry = #"{"type":"ss","via":"# + entry + "}"
+            }
+            return data(#"{"outbound":"# + entry + "}")
+        }
+        // Within the cap a chain without mesh is clean, and one with mesh is found.
+        XCTAssertFalse(EmbeddedRuntimeConfig.containsMeshOutbound(chain(depth: 10, last: #"{"type":"ss"}"#)))
+        XCTAssertTrue(EmbeddedRuntimeConfig.containsMeshOutbound(chain(depth: 10, last: #"{"type":"mesh"}"#)))
+        // Past the cap it is refused whatever it ends in: the kernel refuses a chain over 4 anyway.
+        let deep = EmbeddedRuntimeConfig.maxViaDepth + 2
+        XCTAssertTrue(EmbeddedRuntimeConfig.containsMeshOutbound(chain(depth: deep, last: #"{"type":"ss"}"#)))
+        XCTAssertNotNil(EmbeddedRuntimeConfig.meshGateFailure(chain(depth: deep, last: #"{"type":"ss"}"#), enabled: false))
+    }
+
+    // MARK: allow_mesh
+
+    private func allowMesh(_ config: EmbeddedRuntimeConfig) throws -> Any? {
+        let object = try JSONSerialization.jsonObject(with: config.encoded()) as? [String: Any]
+        return object?["allow_mesh"]
+    }
+
+    private func base() -> EmbeddedRuntimeConfig {
+        EmbeddedRuntimeConfig(
+            outbound: .native(.init(type: "direct", server: "", port: 0, settings: [:])), profileID: "p"
+        )
+    }
+
+    func testTheFinalEnvelopeCarriesTheGateAndNeverMoreThanTheGate() throws {
+        XCTAssertNil(try allowMesh(base()), "the stored profile carries none")
+        XCTAssertEqual(try allowMesh(base().withAllowMesh(false)) as? Bool, false)
+        XCTAssertEqual(try allowMesh(base().withAllowMesh(true)) as? Bool, true)
+        // A config that said true is overwritten by a closed gate.
+        XCTAssertEqual(try allowMesh(base().withAllowMesh(true).withAllowMesh(false)) as? Bool, false)
+        XCTAssertNil(base().withAllowMesh(true).withoutSecret().allowMesh)
+        // What the engine gets (`EngineBudget.encoded`) carries the build's gate.
+        let sent = try JSONSerialization.jsonObject(with: EngineBudget.encoded(base().withAllowMesh(true))) as? [String: Any]
+        XCTAssertEqual(sent?["allow_mesh"] as? Bool, MeshSupport.enabled)
+        // An envelope that is not a config object gets the same.
+        let object = EmbeddedRuntimeConfig.withAllowMesh(["allow_mesh": true, "x": 1], open: false)
+        XCTAssertEqual(object["allow_mesh"] as? Bool, false)
+        XCTAssertEqual(EmbeddedRuntimeConfig.withAllowMesh([:], open: true)["allow_mesh"] as? Bool, true)
+    }
+
+    func testTheKernelsOwnRefusalReadsAsTheGatedOne() {
+        XCTAssertTrue(EmbeddedRuntimeConfig.isMeshGated("config_rejected: mesh outbounds are not allowed by this config"))
+        XCTAssertFalse(EmbeddedRuntimeConfig.isMeshGated("config_rejected: bad port"))
+    }
+
+    func testTheAnswerToCapabilitiesDecidesAvailability() {
+        XCTAssertTrue(MeshSupport.runsMesh(capabilitiesAnswer: data(#"{"capabilities":{"mesh":true}}"#)))
+        XCTAssertFalse(MeshSupport.runsMesh(capabilitiesAnswer: data(#"{"capabilities":{"mesh":false}}"#)))
+        XCTAssertFalse(MeshSupport.runsMesh(capabilitiesAnswer: data(#"{"ok":false,"error":{"code":"unsupported"}}"#)))
+        XCTAssertFalse(MeshSupport.runsMesh(capabilitiesAnswer: data("not json")))
+        XCTAssertFalse(MeshSupport.runsMesh(capabilitiesAnswer: nil))
+    }
+
+    // MARK: call sites
+
+    private func source(_ path: String) throws -> [String] {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let source = try String(
-            contentsOf: root.appendingPathComponent("Sources/NetworkCorePacketTunnel/PacketTunnelProvider.swift"),
-            encoding: .utf8
-        )
-        func count(_ needle: String) -> Int {
-            source.components(separatedBy: needle).count - 1
+        let text = try String(contentsOf: root.appendingPathComponent(path), encoding: .utf8)
+        // Comment lines (`//`, `///`) may name a call; only code counts.
+        return text.components(separatedBy: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+    }
+
+    /// The code lines of `lines` between the `func` line that contains `signature` and the next function declaration.
+    private func body(of signature: String, in lines: [String]) -> String {
+        guard let start = lines.firstIndex(where: { $0.contains("func ") && $0.contains(signature) }) else {
+            return ""
         }
-        XCTAssertEqual(count("EmbeddedRuntimeConfig.meshGateFailure(of: "), 2, "launchTunnel and beginMeshOnly")
-        XCTAssertEqual(count("EmbeddedRuntimeConfig.meshGateControlRefusal("), 1, "the control path")
+        let rest = lines[(start + 1)...]
+        let end = rest.firstIndex { $0.hasPrefix("    ") && !$0.hasPrefix("     ") && $0.contains("func ") }
+        return rest[..<(end ?? lines.endIndex)].joined(separator: "\n")
+    }
+
+    /// The start paths of the extension call the gate, each inside the function that starts an engine: removing a call
+    /// fails here (the extension is not a test target, so its source is read).
+    func testTheTunnelStartsAndTheControlPathCallTheGate() throws {
+        let lines = try source("Sources/NetworkCorePacketTunnel/PacketTunnelProvider.swift")
+        let source = lines.joined(separator: "\n")
+        func count(_ needle: String, in text: String) -> Int {
+            text.components(separatedBy: needle).count - 1
+        }
+        let gate = "EmbeddedRuntimeConfig.meshGateFailure(of: "
+        XCTAssertEqual(count(gate, in: source), 2, "launchTunnel and beginMeshOnly")
+        XCTAssertEqual(count(gate, in: body(of: "beginTunnel(", in: lines)), 1)
+        XCTAssertEqual(count(gate, in: body(of: "beginMeshOnly(", in: lines)), 1)
+        XCTAssertEqual(count("EmbeddedRuntimeConfig.meshGateControlRefusal(", in: source), 1, "the control path")
+        XCTAssertEqual(
+            count("EmbeddedRuntimeConfig.meshGateControlRefusal(", in: body(of: "handleAppMessage(", in: lines)), 1
+        )
         XCTAssertFalse(source.contains("try? config.encoded()"))
+    }
+
+    /// Every engine start encodes through `EngineBudget.encoded`, which sets `allow_mesh` to the gate; no start path
+    /// encodes a config itself, and nothing writes `allow_mesh: true` as a literal.
+    func testEveryEngineStartCarriesTheGateInTheEnvelope() throws {
+        let provider = try source("Sources/NetworkCorePacketTunnel/PacketTunnelProvider.swift").joined(separator: "\n")
+        XCTAssertGreaterThanOrEqual(provider.components(separatedBy: "EngineBudget.encoded(").count - 1, 4)
+        XCTAssertFalse(provider.contains("EmbeddedRuntimeSession(config: config.encoded"))
+        let budget = try source("Sources/NetworkCoreBridge/EngineBudget.swift").joined(separator: "\n")
+        XCTAssertTrue(budget.contains("config.withAllowMesh().encoded()"))
+        let probe = try source("Sources/NetworkCoreAppHost/EngineCapabilities.swift").joined(separator: "\n")
+        XCTAssertTrue(probe.contains("EmbeddedRuntimeConfig.withAllowMesh("))
     }
 }

@@ -386,6 +386,8 @@ pub fn with_joined(dir: &Path, envelope: String) -> (String, Option<String>) {
     else {
         return (envelope, None);
     };
+    let mut meshed = meshed;
+    with_allow_mesh(&mut meshed);
     let meshed = meshed.to_string();
     match engine_embedded::config::RuntimeConfig::from_json(meshed.as_bytes()) {
         Ok(_) => (meshed, None),
@@ -720,24 +722,34 @@ fn refuse_outbounds(enabled: bool, config: &Value) -> Result<(), String> {
     ))
 }
 
+/// How deep an inline `via` chain is followed. The kernel refuses a chain over 4 (`MAX_VIA_CHAIN` in the kernel's config), so a deeper one is
+/// no config it runs; it counts as holding a mesh outbound (fail closed), so the gate does not depend on the JSON
+/// parser's own nesting limit.
+const MAX_VIA_DEPTH: usize = 64;
+
 /// Whether the profile builds a mesh outbound, where the kernel builds one: the top-level `outbound`, every entry of
 /// `routing.outbounds` (the object form, tag to entry, or an array of entries), and the inline `via` objects of
-/// either, however deep.
+/// either, however deep (past [`MAX_VIA_DEPTH`] counts as one).
 fn has_mesh_outbound(config: &Value) -> bool {
-    config.get("outbound").is_some_and(entry_is_mesh)
+    config
+        .get("outbound")
+        .is_some_and(|entry| entry_is_mesh(entry, 0))
         || match config.pointer("/routing/outbounds") {
-            Some(Value::Object(map)) => map.values().any(entry_is_mesh),
-            Some(Value::Array(list)) => list.iter().any(entry_is_mesh),
+            Some(Value::Object(map)) => map.values().any(|entry| entry_is_mesh(entry, 0)),
+            Some(Value::Array(list)) => list.iter().any(|entry| entry_is_mesh(entry, 0)),
             _ => false,
         }
 }
 
-/// An outbound entry that is of type `mesh` or whose inline `via` chain holds one.
-fn entry_is_mesh(entry: &Value) -> bool {
+/// An outbound entry that is of type `mesh` or whose inline `via` chain holds one, or is deeper than [`MAX_VIA_DEPTH`].
+fn entry_is_mesh(entry: &Value, depth: usize) -> bool {
+    if depth > MAX_VIA_DEPTH {
+        return true;
+    }
     entry.get("type").and_then(Value::as_str) == Some("mesh")
         || entry
             .get("via")
-            .is_some_and(|via| via.is_object() && entry_is_mesh(via))
+            .is_some_and(|via| via.is_object() && entry_is_mesh(via, depth + 1))
 }
 
 /// [`refuse_gated_outbounds`] for an envelope in text; text that is not JSON is left to the engine to refuse.
@@ -749,6 +761,69 @@ pub fn refuse_gated_envelope(envelope: &str) -> Result<(), String> {
         Ok(config) => refuse_gated_outbounds(&config),
         Err(_) => Ok(()),
     }
+}
+
+/// Sets the engine's own gate, `allow_mesh`, to the release gate ([`ENABLED`]) in `config`, a final engine envelope:
+/// the second layer behind [`refuse_gated_outbounds`] (the kernel's default is `false`, and while it is `false` the
+/// engine refuses any mesh outbound and answers no `mesh_*` command). Whatever the envelope said is replaced, so no
+/// profile can open the engine's gate by itself. The only place the client writes the field.
+pub fn with_allow_mesh(config: &mut Value) {
+    set_allow_mesh(config, ENABLED);
+}
+
+fn set_allow_mesh(config: &mut Value, open: bool) {
+    if let Some(object) = config.as_object_mut() {
+        object.insert("allow_mesh".to_string(), Value::Bool(open));
+    }
+}
+
+/// [`with_allow_mesh`] for an envelope in text: what every engine start hands the engine. Text that is not JSON is
+/// left to the engine to refuse, unless it names mesh and the gate is closed: then it is refused here, as nothing can
+/// tell what it would build.
+pub fn with_allow_mesh_text(envelope: &str) -> Result<String, String> {
+    allow_mesh_text(envelope, ENABLED)
+}
+
+fn allow_mesh_text(envelope: &str, open: bool) -> Result<String, String> {
+    match serde_json::from_str::<Value>(envelope) {
+        Ok(mut config) => {
+            set_allow_mesh(&mut config, open);
+            Ok(config.to_string())
+        }
+        Err(_) if !open && envelope.contains("mesh") => Err(crate::refusal::coded(
+            GATED_CODE,
+            "this profile cannot be read and mentions mesh; mesh networks are not available in this version",
+        )),
+        Err(_) => Ok(envelope.to_string()),
+    }
+}
+
+/// [`with_allow_mesh_text`] for an envelope in bytes (the Windows desktop's start paths). Bytes that are not text are
+/// refused while the gate is closed if they name mesh, else left to the engine to refuse.
+pub fn with_allow_mesh_bytes(envelope: &[u8]) -> Result<Vec<u8>, String> {
+    allow_mesh_bytes(envelope, ENABLED)
+}
+
+fn allow_mesh_bytes(envelope: &[u8], open: bool) -> Result<Vec<u8>, String> {
+    match std::str::from_utf8(envelope) {
+        Ok(text) => allow_mesh_text(text, open).map(String::into_bytes),
+        Err(_) if !open && envelope.windows(4).any(|window| window == b"mesh") => {
+            allow_mesh_text("mesh", open).map(String::into_bytes)
+        }
+        Err(_) => Ok(envelope.to_vec()),
+    }
+}
+
+/// An engine start error as a window shows it: the kernel's own refusal of a mesh outbound while `allow_mesh` is off
+/// (`config_rejected`, [`engine_embedded::config::MESH_NOT_ALLOWED`]) is the gated refusal, worded as the client's.
+pub fn map_kernel_refusal(error: String) -> String {
+    if error.contains(engine_embedded::config::MESH_NOT_ALLOWED) {
+        return crate::refusal::coded(
+            GATED_CODE,
+            "this profile contains a mesh outbound; mesh networks are not available in this version",
+        );
+    }
+    error
 }
 
 /// The profile id of the engine that runs for the mesh alone.
@@ -881,7 +956,10 @@ fn engine_runs_mesh() -> bool {
             joined: true,
             config: probe,
         }];
-        only_profile(&outbounds(&networks)).is_some_and(|profile| {
+        // The same answer the engine gives to `{"cmd":"capabilities"}` with `allow_mesh` set to the gate: its config
+        // builds with the mesh module compiled in. (`engine_runs_mesh` runs only while the gate is open.)
+        only_profile(&outbounds(&networks)).is_some_and(|mut profile| {
+            with_allow_mesh(&mut profile);
             engine_embedded::config::RuntimeConfig::from_json(profile.to_string().as_bytes()).is_ok()
         })
     })
@@ -1805,5 +1883,117 @@ mod tests {
                 .unwrap_err();
             assert!(is_gated_refusal(&error), "{error}");
         }
+    }
+
+    /// A refused start stops the engine that ran before it (no stale engine behind the error). Moving the check back
+    /// before `stop_runtime` fails here. (`MeshOnly` needs a TUN descriptor to run at all, so only `Engine` can be
+    /// started in a test.)
+    #[cfg(not(target_os = "android"))]
+    #[test]
+    fn a_refused_start_stops_the_engine_that_ran() {
+        if ENABLED {
+            return;
+        }
+        let mut engine = super::super::engine::Engine::default();
+        engine
+            .start(&super::super::engine::direct_envelope(), "direct", 0)
+            .unwrap();
+        assert!(engine.is_running());
+        let error = engine
+            .start(r#"{"outbound":{"type":"mesh"}}"#, "node", 0)
+            .unwrap_err();
+        assert!(is_gated_refusal(&error), "{error}");
+        assert!(!engine.is_running());
+        assert_eq!(engine.node_id(), None);
+    }
+
+    #[test]
+    fn a_via_chain_deeper_than_the_cap_counts_as_mesh() {
+        fn chain(depth: usize, last: Value) -> Value {
+            let mut entry = last;
+            for _ in 0..depth {
+                entry = json!({ "type": "ss", "via": entry });
+            }
+            json!({ "outbound": entry })
+        }
+        // Within the cap the answer follows the chain's end.
+        assert!(!has_mesh_outbound(&chain(10, json!({ "type": "ss" }))));
+        assert!(has_mesh_outbound(&chain(10, json!({ "type": "mesh" }))));
+        // Past it the chain is refused whatever it ends in.
+        let deep = chain(MAX_VIA_DEPTH + 2, json!({ "type": "ss" }));
+        assert!(has_mesh_outbound(&deep));
+        assert!(is_gated_refusal(
+            &refuse_outbounds(false, &deep).unwrap_err()
+        ));
+        // The deep value is dropped with the stack as it is; nothing else walks it.
+        assert_eq!(refuse_outbounds(true, &deep), Ok(()));
+    }
+
+    /// The final envelope carries the release gate in `allow_mesh`, and never more than the gate.
+    #[test]
+    fn the_final_envelope_carries_the_gate_in_allow_mesh() {
+        let envelope = r#"{"schema_version":1,"profile_id":"p","outbound":{"type":"direct"}}"#;
+        let closed: Value =
+            serde_json::from_str(&allow_mesh_text(envelope, false).unwrap()).unwrap();
+        assert_eq!(closed["allow_mesh"], json!(false));
+        let open: Value = serde_json::from_str(&allow_mesh_text(envelope, true).unwrap()).unwrap();
+        assert_eq!(open["allow_mesh"], json!(true));
+        // A profile that opens the engine's gate itself is overwritten by a closed one.
+        let forced = r#"{"allow_mesh":true,"outbound":{"type":"direct"}}"#;
+        let closed: Value = serde_json::from_str(&allow_mesh_text(forced, false).unwrap()).unwrap();
+        assert_eq!(closed["allow_mesh"], json!(false));
+        let mut value = json!({ "allow_mesh": true });
+        set_allow_mesh(&mut value, false);
+        assert_eq!(value, json!({ "allow_mesh": false }));
+        // The build's own gate.
+        let mut value = json!({ "allow_mesh": !ENABLED });
+        with_allow_mesh(&mut value);
+        assert_eq!(value["allow_mesh"], json!(ENABLED));
+        let text: Value = serde_json::from_str(&with_allow_mesh_text(envelope).unwrap()).unwrap();
+        assert_eq!(text["allow_mesh"], json!(ENABLED));
+        // Text that cannot be read is refused while the gate is closed if it names mesh, else left to the engine.
+        let error = allow_mesh_text(r#"{"outbound":{"type":"mesh""#, false).unwrap_err();
+        assert!(is_gated_refusal(&error), "{error}");
+        assert_eq!(
+            allow_mesh_text("not json", false),
+            Ok("not json".to_string())
+        );
+        assert_eq!(
+            allow_mesh_text(r#"{"outbound":{"type":"mesh""#, true),
+            Ok(r#"{"outbound":{"type":"mesh""#.to_string())
+        );
+    }
+
+    #[test]
+    fn bytes_get_the_same_gate() {
+        let closed = allow_mesh_bytes(br#"{"allow_mesh":true}"#, false).unwrap();
+        assert_eq!(closed, br#"{"allow_mesh":false}"#.to_vec());
+        let open = allow_mesh_bytes(br#"{}"#, true).unwrap();
+        assert_eq!(open, br#"{"allow_mesh":true}"#.to_vec());
+        assert!(is_gated_refusal(
+            &allow_mesh_bytes(b"\xff mesh", false).unwrap_err()
+        ));
+        assert_eq!(allow_mesh_bytes(b"\xff", false), Ok(b"\xff".to_vec()));
+    }
+
+    /// The kernel's own refusal is the client's gated one, in one wording.
+    #[test]
+    fn the_kernels_refusal_reads_as_the_gated_one() {
+        let kernel = format!(
+            "config_rejected: {}",
+            engine_embedded::config::MESH_NOT_ALLOWED
+        );
+        assert!(is_gated_refusal(&map_kernel_refusal(kernel)));
+        assert_eq!(map_kernel_refusal("bad port".to_string()), "bad port");
+    }
+
+    /// With the gate closed the engine itself refuses a mesh outbound, so a client that forgot its own check still
+    /// starts nothing: the envelope the client sends parses with the kernel's `MESH_NOT_ALLOWED` refusal.
+    #[test]
+    fn a_closed_gate_leaves_the_engine_to_refuse_mesh_too() {
+        let envelope = r#"{"schema_version":1,"profile_id":"p","outbound":{"type":"mesh"}}"#;
+        let sent = allow_mesh_text(envelope, false).unwrap();
+        let error = engine_embedded::config::RuntimeConfig::from_json(sent.as_bytes()).unwrap_err();
+        assert_eq!(error.message, engine_embedded::config::MESH_NOT_ALLOWED);
     }
 }

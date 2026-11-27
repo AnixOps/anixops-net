@@ -12,7 +12,7 @@
 | 1.2 | 0.4 | 地区分组与归属依据、迁区建议与申请（R24）、边界与宿主组（组地址段，R21、R26）、地址分配（固定 / 自动）、其他地区与骨干的可达状态（R19）、外部网络（R36） |
 | 1.3 | 0.5 | 自定义路径与回落提示、个人电脑用入网凭据加入 |
 
-内核没有组网能力（`capabilities.mesh` 不存在或为 `false`）时，各平台不显示组网入口。版本内尚未提供的字段缺省即可，
+内核没有组网能力（`capabilities.mesh` 不存在或为 `false`，见「发布闸门」）时，各平台不显示组网入口。版本内尚未提供的字段缺省即可，
 界面按缺省值降级：没有 `regions` 时成员不分组，没有 `links` 时路径页不显示跨区链路，没有 `paths` 时不显示自定义路径。
 
 ## 读取：状态快照
@@ -305,7 +305,23 @@
   `via` 对象（递归）。拒绝不删除（规则可能引用该 tag），错误码固定为 `error.mesh_gated`，各端自行用本地语言措辞，不含配置内容。
   每个启动入口都调用同一道门：client-core 的 `Engine::start` 与 `MeshOnly::start`（安卓、Linux、Windows 原生）、Windows 桌面端的
   `DesktopTun::start_with`（TUN 模式与仅组网）、Apple 扩展的 `launchTunnel` 与 `beginMeshOnly`；被拒绝的重启先停掉旧引擎，不留旧连接；
-  按需连接把它当作不可重试的失败。门检查的调用点由 `mesh-release-gate.sh` 断言存在。
+  按需连接把它当作不可重试的失败。门检查的调用点由 `mesh-release-gate.sh` 断言存在。Windows 桌面的系统代理模式（本地代理）同样拒绝
+  （`start_embedded`），与 TUN 模式一致。内联 `via` 的递归最多跟 64 层，更深的按「含组网」处理（内核本来就拒绝超过 4 层的链）。
+- 内核层的第二道门（内核固定在 `f0d1633414e466970f4b681492828e0c2075b30e`，v0.3.0-rc.2，core#424、#425）：内核的信封字段
+  `allow_mesh`（布尔，缺省 `false`）为 `false` 或缺省时，`RuntimeConfig::from_json` 以 `config_rejected`、固定消息
+  `mesh outbounds are not allowed by this config` 拒绝任何位置的组网出站，该运行实例 `capabilities.mesh` 为 `false`，所有
+  `mesh_*` 命令返回 `unsupported`。两层都保留，不得以「内核已有开关」为由删掉客户端门：客户端门先拒绝，保证各端错误码都是
+  `error.mesh_gated`、文案一致；`allow_mesh` 覆盖客户端解析与内核解析的差异（审计 #351 L-f）、将来的新入口和新的出站构建位置。
+  交给引擎的每一份最终信封都带 `"allow_mesh": <发布门是否打开>`（client-core 为 `mesh::ENABLED`，Apple 为 `MeshSupport.enabled`），
+  用户手写或导入的配置里的 `allow_mesh` 一律被覆盖，不存在写死 `true` 的位置：client-core 的 `mesh::with_allow_mesh`
+  （文本与字节形式，`Engine::start`、`MeshOnly::start`、`through_temporary_proxy`、Windows 桌面的 `DesktopTun::start_with` 与本地代理的
+  `start_embedded`）；Apple 的 `EmbeddedRuntimeConfig.withAllowMesh`，由 `EngineBudget.encoded` 统一调用，扩展里每一次交给引擎的编码都经过它。
+  信封无法解析而含 `mesh` 时，发布门关闭则拒绝。内核自己的 `MESH_NOT_ALLOWED` 拒绝也映射为同一条 `error.mesh_gated` 文案。
+  `mesh-release-gate.sh` 断言各启动文件里这些调用都在预期的函数内（不计注释行），并检查没有源文件写死 `allow_mesh` 为 `true`（测试除外）。
+- 组网是否可用由引擎回答，不由特性集版本推断：内核固定后 `networkcore_ios_feature_set_version` 为 7，且不随 `mesh` feature 变化。Apple 的
+  `MeshSupport.available` 为 `enabled`（发布门）且引擎对 `{"cmd":"capabilities"}` 回答 `capabilities.mesh` 为 `true`；应用在启动时
+  （`EngineCapabilities.install`）装上探测：在应用进程内以带发布门 `allow_mesh` 的最小配置建一个不启动的运行时，问一次并缓存。
+  client-core 与引擎同进程，`mesh::supported()` 用同一份配置解析探测（带发布门 `allow_mesh` 的仅组网配置能否被引擎构建）。
 - 发布门关闭时，Apple 扩展的控制通道拒绝除 `mesh_engine_stop` 以外的所有 `mesh_*` 命令，请求含 `mesh_` 而无法解析时同样拒绝，答
   `error.mesh_gated`；client-core 的窗口请求在 `activity_request` 中同样拒绝所有 `mesh_*`。
 - 解除闸门：内核线程确认内核 0.3 完成并通过审计后，随下一次内核固定一起修改。

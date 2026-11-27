@@ -180,7 +180,7 @@ pub fn hold_adapter() -> Result<AdapterLease, TunStartError> {
 
 /// The mesh release gate for an envelope in bytes (`client_core::backend::mesh::refuse_gated_envelope`); bytes that
 /// are not text are left to the engine to refuse.
-fn refuse_gated(envelope: &[u8]) -> Result<(), String> {
+pub(crate) fn refuse_gated(envelope: &[u8]) -> Result<(), String> {
     match std::str::from_utf8(envelope) {
         Ok(text) => client_core::backend::mesh::refuse_gated_envelope(text),
         Err(_) => Ok(()),
@@ -205,11 +205,16 @@ impl DesktopTun {
         // refuses: this is the entry of both TUN mode and the mesh alone, and neither goes through client-core's
         // `Engine`.
         refuse_gated(envelope).map_err(TunStartError::other)?;
+        // The engine's own gate too: `allow_mesh` is the release gate in the envelope, whatever the file said
+        // (`client_core::backend::mesh::with_allow_mesh_bytes`). A file that cannot be read and names mesh is refused.
+        let envelope = client_core::backend::mesh::with_allow_mesh_bytes(envelope)
+            .map_err(TunStartError::other)?;
+        let envelope = envelope.as_slice();
         let config = RuntimeConfig::from_json(envelope).map_err(|error| {
-            TunStartError::other(format!(
+            TunStartError::other(client_core::backend::mesh::map_kernel_refusal(format!(
                 "TUN mode configuration was rejected: {}",
                 error.message
-            ))
+            )))
         })?;
         let settings = WindowsTunSettings {
             mtu: u32::from(config.mtu),

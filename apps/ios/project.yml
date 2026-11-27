@@ -217,6 +217,7 @@ targets:
       - path: Sources/NetworkCoreAppHost/TunnelController.swift
       - path: Sources/NetworkCoreAppHost/TunnelController+CaptureCopies.swift
       - path: Sources/NetworkCoreAppHost/CaptureViewer.swift
+      - path: Sources/NetworkCoreAppHost/EngineCapabilities.swift
       - path: Sources/NetworkCoreAppHost/URLCommandHandler.swift
       - path: Sources/NetworkCoreAppHost/AppNotifications.swift
       - path: Sources/NetworkCoreAppHost/BlockQuicSection.swift

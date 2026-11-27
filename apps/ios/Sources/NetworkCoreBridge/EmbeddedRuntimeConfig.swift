@@ -210,6 +210,10 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
     /// extension adds it with `withBlockQuic(_:)`; the app switches it later without a restart
     /// (`RuntimeControl.setBlockQuic`).
     public private(set) var blockQuic: Bool?
+    /// The engine's `allow_mesh` (kernel: default `false`, and while `false` the engine refuses any mesh outbound and
+    /// answers no `mesh_*` command). Never stored in the tunnel profile; every config handed to the engine gets the
+    /// release gate's value (`withAllowMesh(_:)`, `EngineBudget.encoded`), whatever the config said before.
+    public private(set) var allowMesh: Bool?
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
@@ -222,6 +226,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         case dns
         case redirects
         case blockQuic = "block_quic"
+        case allowMesh = "allow_mesh"
     }
 
     /// Only the extension encodes a routed config, and only for the runtime; nothing decodes one.
@@ -240,6 +245,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         try container.encodeIfPresent(dns, forKey: .dns)
         try container.encodeIfPresent(redirects, forKey: .redirects)
         try container.encodeIfPresent(blockQuic, forKey: .blockQuic)
+        try container.encodeIfPresent(allowMesh, forKey: .allowMesh)
     }
 
     public init(node: ShadowsocksNode, profileID: String, mtu: Int = 1500) {
@@ -318,6 +324,26 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         copy.dns = nil
         copy.redirects = nil
         copy.blockQuic = nil
+        copy.allowMesh = nil
+        return copy
+    }
+
+    /// The same config telling the engine whether mesh is allowed: the release gate (`MeshSupport.enabled`), the
+    /// second layer behind the client's own refusal (`meshGateFailure`). Whatever `allowMesh` held before is replaced,
+    /// so a config can never open the engine's gate by itself. `open` is a parameter for tests only.
+    public func withAllowMesh(_ open: Bool = MeshSupport.enabled) -> EmbeddedRuntimeConfig {
+        var copy = self
+        copy.allowMesh = open
+        return copy
+    }
+
+    /// `object`, a decoded envelope, with `allow_mesh` set to the release gate (the same as `withAllowMesh(_:)`, for
+    /// an envelope that is not an `EmbeddedRuntimeConfig`).
+    public static func withAllowMesh(
+        _ object: [String: Any], open: Bool = MeshSupport.enabled
+    ) -> [String: Any] {
+        var copy = object
+        copy["allow_mesh"] = open
         return copy
     }
 
@@ -534,9 +560,13 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
     /// compiles mesh in with no runtime switch. Nothing is stripped (a rule may name the tag).
     public static let meshGatedReason = "\(meshGatedCode): this profile contains a mesh outbound; mesh networks are not available in this version"
 
+    /// The kernel's own refusal of a mesh outbound while `allow_mesh` is off (`config_rejected`,
+    /// `engine_embedded::config::MESH_NOT_ALLOWED`); worded like the client's.
+    static let kernelMeshNotAllowed = "mesh outbounds are not allowed by this config"
+
     /// Whether `text` is the extension's refusal `meshGatedReason` (the failure's description).
     public static func isMeshGated(_ text: String) -> Bool {
-        text.contains(meshGatedCode + ":")
+        text.contains(meshGatedCode + ":") || text.contains(kernelMeshNotAllowed)
     }
 
     /// The refusal for `data`, the final engine profile; `nil` when it may start.
@@ -588,7 +618,7 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return false
         }
-        if let outbound = root["outbound"], entryIsMesh(outbound) {
+        if let outbound = root["outbound"], entryIsMesh(outbound, depth: 0) {
             return true
         }
         let entries: [Any]
@@ -600,18 +630,26 @@ public struct EmbeddedRuntimeConfig: Codable, Equatable {
         default:
             return false
         }
-        return entries.contains(where: entryIsMesh)
+        return entries.contains { entryIsMesh($0, depth: 0) }
     }
 
-    /// An outbound entry of type `mesh`, or whose inline `via` chain holds one.
-    private static func entryIsMesh(_ entry: Any) -> Bool {
+    /// How deep an inline `via` chain is followed. The kernel refuses a chain over 4, so a deeper one is not a
+    /// config it would run; it counts as holding a mesh outbound (fail closed) so the gate never depends on the
+    /// JSON parser's own nesting limit.
+    static let maxViaDepth = 64
+
+    /// An outbound entry of type `mesh`, or whose inline `via` chain holds one (or is deeper than `maxViaDepth`).
+    private static func entryIsMesh(_ entry: Any, depth: Int) -> Bool {
+        guard depth <= maxViaDepth else {
+            return true
+        }
         guard let object = entry as? [String: Any] else {
             return false
         }
         if object["type"] as? String == "mesh" {
             return true
         }
-        return object["via"].map(entryIsMesh) ?? false
+        return object["via"].map { entryIsMesh($0, depth: depth + 1) } ?? false
     }
 }
 

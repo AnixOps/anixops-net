@@ -1,9 +1,52 @@
 import Foundation
 
-/// Whether this build runs mesh networks: `enabled`, and an engine of feature set 7 or later (mesh-status.md).
-/// The app shows the 组网 entry from it, whether the tunnel runs or not.
+/// Whether this build runs mesh networks: `enabled`, and an engine that answers `capabilities.mesh` (mesh-status.md).
+/// The feature set does not tell: since kernel 0.3.0-rc.2 it is 7 with or without the `mesh` feature. The app shows
+/// the 组网 entry from it, whether the tunnel runs or not.
 public enum MeshSupport {
-    public static let minimumFeatureSet: UInt32 = 7
+    /// The control request that asks an engine what it can do.
+    public static let capabilitiesRequest = Data(#"{"cmd":"capabilities"}"#.utf8)
+
+    /// Whether the answer to `capabilitiesRequest` (`{"capabilities":{"mesh":bool}}`) says the engine runs mesh.
+    /// No answer, a refusal or anything else is no.
+    public static func runsMesh(capabilitiesAnswer data: Data?) -> Bool {
+        guard let data,
+              let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let capabilities = object["capabilities"] as? [String: Any],
+              let mesh = capabilities["mesh"] as? NSNumber
+        else {
+            return false
+        }
+        return mesh.boolValue
+    }
+
+    private static let probeLock = NSLock()
+    private static var probe: (() -> Data?)?
+    private static var probed: Bool?
+
+    /// Installs how the app asks an engine for its capabilities: the answer to `capabilitiesRequest` from an engine
+    /// built with the release gate's `allow_mesh` (the Bridge links no engine). Until then no engine runs mesh.
+    public static func installCapabilitiesProbe(_ probe: @escaping () -> Data?) {
+        probeLock.lock()
+        defer { probeLock.unlock() }
+        self.probe = probe
+        probed = nil
+    }
+
+    /// Whether the engine this build links answers `capabilities.mesh`; asked once, then kept.
+    static var engineRunsMesh: Bool {
+        probeLock.lock()
+        defer { probeLock.unlock() }
+        if let probed {
+            return probed
+        }
+        guard let probe else {
+            return false
+        }
+        let answer = runsMesh(capabilitiesAnswer: probe())
+        probed = answer
+        return answer
+    }
 
     /// Whether this build offers 组网 at all. Off until kernel 0.3 is complete and audited, whatever the engine
     /// runs: the release gate, not a capability (the same as client-core's `mesh::ENABLED`). A build with the
@@ -25,7 +68,7 @@ public enum MeshSupport {
     #endif
 
     public static var available: Bool {
-        enabled && NetworkCoreRuntimeFFI.featureSetVersion >= minimumFeatureSet
+        enabled && engineRunsMesh
     }
 }
 

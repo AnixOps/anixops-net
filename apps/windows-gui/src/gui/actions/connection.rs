@@ -301,8 +301,18 @@ impl DesktopCore {
     /// The listener is bound when this returns.
     fn start_embedded(&mut self, envelope: &[u8], listen: SocketAddr) -> Result<(), String> {
         self.stop_embedded();
-        let proxy = LocalProxy::start(envelope, listen, MixedSettings::default())
-            .map_err(|error| format!("embedded engine could not start: {}", error.message))?;
+        // The mesh release gate holds in system proxy mode as in TUN mode (`DesktopTun::start_with`), so a profile
+        // with a mesh outbound is refused in both, though the proxy's engine could not run it.
+        crate::gui::tun_mode::refuse_gated(envelope)?;
+        // The engine's own gate: `allow_mesh` is the release gate in the envelope.
+        let envelope = client_core::backend::mesh::with_allow_mesh_bytes(envelope)?;
+        let proxy =
+            LocalProxy::start(&envelope, listen, MixedSettings::default()).map_err(|error| {
+                client_core::backend::mesh::map_kernel_refusal(format!(
+                    "embedded engine could not start: {}",
+                    error.message
+                ))
+            })?;
         self.embedded = Some(proxy);
         // The lists read the new engine now; a session the viewer held after the last stop is let go.
         desktop_mitm::sessions::close_viewer();

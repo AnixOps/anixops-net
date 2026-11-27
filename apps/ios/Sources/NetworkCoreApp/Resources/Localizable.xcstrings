@@ -6184,13 +6184,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This profile contains mesh settings that this version does not support. Remove them and connect again."
+            "value": "This profile contains mesh settings that are not yet available in this version. Remove them and connect again."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "此設定包含目前版本尚未開放的組網設定，請移除後再連線。"
+            "value": "此設定檔包含目前版本尚未開放的組網項目，請移除後再連線。"
           }
         }
       }
