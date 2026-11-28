@@ -13,7 +13,6 @@ use control_domain::{
     DiagnosticSeverity, MetadataEntry, NodeDescriptor, Protocol, RawSubscription,
     SubscriptionService, NODE_METADATA_ANX_LICENSE_ORIGIN, NODE_METADATA_PATH, NODE_PATH_TRUNK,
 };
-use engine_embedded::checkup::{run_checkup, CheckupOptions, CheckupReport};
 use engine_embedded::config::RuntimeConfig;
 use engine_embedded::delay::measure_delay;
 use engine_embedded::local_proxy::LocalProxy;
@@ -772,17 +771,6 @@ pub(crate) fn through_proxy_gated<T>(
 pub fn node_delay(nodes: &[NodeDescriptor], node_id: &str, url: &str) -> Result<Duration, String> {
     let envelope = envelope(nodes, node_id)?;
     measure_delay(envelope.as_bytes(), url, DELAY_TIMEOUT).map_err(|error| error.to_string())
-}
-
-/// Node checkup (节点体检) through one node: latency rounds and, when `options.throughput` is set, a
-/// download with the latency under load. Only runs when the user starts it (docs/network-behavior.md).
-pub fn node_checkup(
-    nodes: &[NodeDescriptor],
-    node_id: &str,
-    options: &CheckupOptions,
-) -> Result<CheckupReport, String> {
-    let envelope = envelope(nodes, node_id)?;
-    run_checkup(envelope.as_bytes(), options).map_err(|error| error.to_string())
 }
 
 /// The link other clients import for `node`; Snell gives a Surge proxy line.

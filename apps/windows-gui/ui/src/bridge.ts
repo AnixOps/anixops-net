@@ -3,6 +3,12 @@ import { setCaptureRequest } from "./capture-filter";
 
 export type Tone = "success" | "warning" | "danger" | "neutral";
 
+export interface NodeCheckupSection {
+  id: string;
+  capped: boolean;
+  rows: { id: string; kind: string; value: number | string | null; warn: boolean }[];
+}
+
 export interface StatusFact {
   label: string;
   detail?: string;
@@ -789,6 +795,10 @@ export const desktop = {
     invoke<OperationResult>("test_node_delay", { nodeId, url }),
   /** Tests each node on its own and reports every result; failures do not reject. */
   testDelays: (nodeIds: string[], url: string) => invoke<NodeDelay[]>("test_node_delays", { nodeIds, url }),
+  nodeCheckup: (nodeId: string, download: boolean) => invoke<{ sections: NodeCheckupSection[] }>(
+    "node_checkup",
+    download ? { nodeId, options: { throughput: { max_bytes: 200_000_000 } } } : { nodeId },
+  ),
   /** The exit address through the local proxy (only while `connected`) and the delay of a direct mainland request. */
   networkProbe: (connected: boolean) => invoke<NetworkProbe>("network_probe", { connected }),
   /** The node's share link, or a Surge line for Snell. */

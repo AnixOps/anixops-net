@@ -27,6 +27,7 @@ use control_domain::{NodeDescriptor, SubscriptionService, SubscriptionSource};
 use desktop_dns::DnsPreset;
 use desktop_mitm::mappings;
 use desktop_mitm::sessions::{AutoSave, CaptureCarry};
+use engine_embedded::checkup::CheckupOptions;
 use engine_embedded::config::{RuntimeConfig, CONFIG_SCHEMA_VERSION};
 use engine_embedded::delay::measure_delay;
 use engine_embedded::nodes::{outbound_for_node, routing_envelope_with_sets, single_node_envelope};
@@ -746,6 +747,7 @@ pub(super) fn run(debug: bool) -> Result<(), String> {
             remove_decrypt_host,
             test_node_delay,
             test_node_delays,
+            node_checkup,
             network_probe,
             node_share_link,
             traffic_stats,
@@ -2828,8 +2830,13 @@ fn test_node_delay_blocking(
 
 /// Delay through a node of the profile or of another subscription.
 fn listed_node_delay(desktop: &DesktopState, node_id: &str, url: &str) -> Result<Duration, String> {
+    let (profile, _) = listed_node_profile(desktop, node_id)?;
+    measure_delay(profile.as_bytes(), url, EMBEDDED_DELAY_TIMEOUT).map_err(|error| error.to_string())
+}
+
+fn listed_node_profile(desktop: &DesktopState, node_id: &str) -> Result<(String, String), String> {
     match selected_catalog_node(desktop, node_id) {
-        Ok(node) => measure_embedded_node_delay(&node.id, url),
+        Ok(node) => Ok((embedded_node_profile(&node.id)?, node.label)),
         Err(error) => {
             let other = other_sources(desktop);
             let node = other
@@ -2838,10 +2845,28 @@ fn listed_node_delay(desktop: &DesktopState, node_id: &str, url: &str) -> Result
                 .ok_or(error)?;
             let profile =
                 linked_sources::node_profile(EMBEDDED_PROFILE_ID, CONFIG_SCHEMA_VERSION, node);
-            measure_delay(profile.as_bytes(), url, EMBEDDED_DELAY_TIMEOUT)
-                .map_err(|error| error.to_string())
+            Ok((profile, node.label.clone()))
         }
     }
+}
+
+#[tauri::command]
+async fn node_checkup(
+    state: State<'_, DesktopAppState>,
+    node_id: String,
+    options: Option<CheckupOptions>,
+) -> Result<Value, String> {
+    let state = state.inner().clone();
+    run_blocking(move || {
+        let desktop = state
+            .desktop
+            .lock()
+            .map_err(|_| "desktop state lock failed")?
+            .clone();
+        let (envelope, name) = listed_node_profile(&desktop, &node_id)?;
+        client_core::client::node_checkup(&envelope, name, &options.unwrap_or_default())
+    })
+    .await
 }
 
 /// One node's result in a batch delay test.

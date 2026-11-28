@@ -22,7 +22,7 @@ use app_notifications::{Notice, Settings as NotificationSettings};
 use client_health::Health;
 use desktop_mitm::mappings;
 use desktop_mitm::plugins;
-use engine_embedded::checkup::{CheckupOptions, CheckupReport};
+use engine_embedded::checkup::{run_checkup, CheckupOptions, CheckupReport};
 use on_demand::{Action as OnDemandAction, Settings as OnDemandSettings};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -1579,11 +1579,7 @@ fn handler(name: &str) -> Option<Handler> {
                 .backend()
                 .delay_target(&node_id)
                 .ok_or_else(crate::backend::node_missing)?;
-            let report = engine::node_checkup(&nodes, &id, &options)?;
-            let mut answer = json(NodeCheckup { name, report })?;
-            let mut shown = client_view::checkup::checkup(&answer);
-            answer["sections"] = shown["sections"].take();
-            Ok(answer)
+            node_checkup(&engine::envelope(&nodes, &id)?, name, &options)
         },
         "test_node_delays" => |client, args| {
             let NodeDelaysArgs { node_ids, url } = parse(args)?;
@@ -2113,6 +2109,19 @@ struct NodeCheckupArgs {
 struct NodeCheckup {
     name: String,
     report: CheckupReport,
+}
+
+/// Runs a checkup through one node's envelope and supplies the shared presentation rows.
+pub fn node_checkup(
+    envelope: &str,
+    name: String,
+    options: &CheckupOptions,
+) -> Result<Value, String> {
+    let report = run_checkup(envelope.as_bytes(), options).map_err(|error| error.to_string())?;
+    let mut answer = json(NodeCheckup { name, report })?;
+    let mut shown = client_view::checkup::checkup(&answer);
+    answer["sections"] = shown["sections"].take();
+    Ok(answer)
 }
 
 #[derive(Deserialize)]

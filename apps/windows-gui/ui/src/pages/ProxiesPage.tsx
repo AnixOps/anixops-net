@@ -15,6 +15,7 @@ import { t } from "../i18n";
 import { cancelQrScan, scanQrCode } from "../qr-scan";
 import { formatBytes, formatDay, updateIntervalChoices, updateIntervalLabel, usedFraction } from "../subscription-format";
 import type { Delays, SetDelays } from "./HomePage";
+import { NodeCheckup } from "./NodeCheckup";
 
 /** What the right pane shows: every node, one policy group's members, or the subscriptions. */
 type View = { kind: "nodes" } | { kind: "group"; tag: string } | { kind: "subscriptions" };
@@ -83,6 +84,7 @@ function ProxiesContent({ snapshot, nodes, busy, run, delays, setDelays, pending
   const [protocol, setProtocol] = useState("All");
   const [sort, setSort] = useState<NodeSort>("default");
   const [editing, setEditing] = useState<{ node: NodeSummary; form: NodeForm } | null>(null);
+  const [checkupNode, setCheckupNode] = useState<NodeSummary | null>(null);
   const [groups, setGroups] = useState<NativeGroupSummary[]>([]);
   const [sources, setSources] = useState<SubscriptionSummary[]>([]);
   const refreshSources = useCallback(() => void desktop.subscriptions().then(setSources).catch(() => setSources([])), []);
@@ -109,7 +111,11 @@ function ProxiesContent({ snapshot, nodes, busy, run, delays, setDelays, pending
     (form) => setEditing({ node, form }),
     (error: unknown) => run("node", () => Promise.reject(error)),
   );
+  const checkupMenu = (node: NodeSummary): MenuItem[] => snapshot?.platform === "android" ? [] : [
+    { label: t("节点体检"), icon: Activity, onSelect: () => setCheckupNode(node) },
+  ];
   const nodeMenu = (node: NodeSummary): MenuItem[] => [
+    ...checkupMenu(node),
     { label: t("复制分享链接"), icon: Share2, onSelect: () => void run("share", () => copyShareLink(node)) },
     ...(node.editable ? [
       { label: t("编辑节点"), icon: Pencil, onSelect: () => edit(node) },
@@ -139,6 +145,7 @@ function ProxiesContent({ snapshot, nodes, busy, run, delays, setDelays, pending
 
   return (
     <div className="panes">
+      {checkupNode && <NodeCheckup key={checkupNode.id} node={checkupNode} onClose={() => setCheckupNode(null)} />}
       <PageTools>
         {shown.kind !== "subscriptions" && (
           <label className="search">
@@ -259,6 +266,7 @@ function ProxiesContent({ snapshot, nodes, busy, run, delays, setDelays, pending
                   return result;
                 }) : undefined}
                 onTest={node ? () => testDelays([node]) : undefined}
+                menu={node && snapshot?.platform !== "android" ? checkupMenu(node) : undefined}
               />
             ))}
           </div>
@@ -297,7 +305,7 @@ function NodeCard({ label, protocol, delay, selected, disabled, onPick, onTest, 
   disabled: boolean;
   onPick?: () => void;
   onTest?: () => void;
-  /** Share, edit and remove (actions S4: one icon action, the rest in the menu). */
+  /** Additional node actions (S4: one icon action, the rest in the menu). */
   menu?: MenuItem[];
 }) {
   return (

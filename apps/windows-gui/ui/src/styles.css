@@ -523,6 +523,9 @@ input[type="checkbox"] { width: auto; height: auto; }
 .terms-text .terms-item::before { content: "• "; }
 .terms-declined { margin: 0; font-size: 13px; color: var(--danger); }
 .terms-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.checkup-body { min-height: 0; overflow-y: auto; }
+.checkup-body label { display: flex; align-items: center; gap: 8px; }
+.checkup-body section { margin-top: 14px; }
 
 /* Packet capture (pages/CaptureViews.tsx): connections that open, the detail drill-down, bytes and headers. */
 .list li.openable { padding-right: calc(var(--row-pad) - 4px); }
