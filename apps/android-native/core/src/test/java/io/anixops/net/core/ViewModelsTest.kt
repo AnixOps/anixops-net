@@ -152,4 +152,20 @@ class ViewModelsTest {
             .map { Envelope.json.decodeFromJsonElement(MeshStatusHead.serializer(), it) }
         assertTrue(heads.any { it.network != null && it.own != null && it.regions.isNotEmpty() })
     }
+
+    @Test
+    fun meshDuplicateScopesDecodeIndependently() {
+        val old = Envelope.json.decodeFromString(MeshMemberRow.serializer(), """{"id":"a","name":"host","marks":["duplicate"]}""")
+        assertTrue(old.marks.contains("duplicate"))
+        assertFalse(old.duplicateInNetwork)
+        assertFalse(old.duplicateAcrossRegions)
+        val current = Envelope.json.decodeFromString(
+            MeshMemberRow.serializer(),
+            """{"id":"a","name":"host","duplicateInNetwork":true,"duplicateAcrossRegions":true,"duplicateNetworks":["Lab"]}""",
+        )
+        assertFalse(current.duplicateInRegion)
+        assertTrue(current.duplicateInNetwork)
+        assertTrue(current.duplicateAcrossRegions)
+        assertEquals(listOf("Lab"), current.duplicateNetworks)
+    }
 }

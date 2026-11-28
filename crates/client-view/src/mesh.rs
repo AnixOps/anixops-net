@@ -152,7 +152,8 @@ fn all_members(status: &Value) -> Vec<Value> {
 fn project_member_name(status: &Value, member: &mut Value) {
     let names = list(status, "names");
     let network = &status["network"];
-    let suffix = text(network, "dnsSuffix").trim_end_matches('.');
+    let suffix = text(network, "dnsSuffix");
+    let suffix = suffix.strip_suffix('.').unwrap_or(suffix);
     let explicit = opt_text(member, "domain");
     let mut domain = None;
     let mut key = explicit.and_then(|domain| name_key(domain, suffix));
@@ -257,7 +258,10 @@ fn name_addresses(entry: &Value) -> impl Iterator<Item = IpAddr> + '_ {
 
 /// Where an older snapshot provides an explicit domain, retain its first two labels when the suffix is absent.
 fn name_key(domain: &str, suffix: &str) -> Option<String> {
-    let domain = domain.trim_end_matches('.').to_ascii_lowercase();
+    let domain = domain
+        .strip_suffix('.')
+        .unwrap_or(domain)
+        .to_ascii_lowercase();
     if !suffix.is_empty() {
         if let Some(key) = domain.strip_suffix(&format!(".{}", suffix.to_ascii_lowercase())) {
             return Some(key.to_owned());
@@ -1664,6 +1668,17 @@ mod tests {
         );
         assert_eq!(view["matched"], 1);
         assert_eq!(view["ownDomain"], "local.lon.mesh.internal");
+
+        let mut status = status;
+        status["network"]["dnsSuffix"] = json!("mesh.internal.");
+        assert_eq!(
+            members(&status, "none", "all", "name", "", &[])["ownDomain"],
+            "local.lon.mesh.internal"
+        );
+        status["network"]["dnsSuffix"] = json!("mesh.internal..");
+        let invalid = members(&status, "none", "all", "name", "", &[]);
+        assert!(invalid.get("ownDomain").is_none());
+        assert!(invalid["groups"][0]["rows"][0]["domain"].is_null());
     }
 
     #[test]
