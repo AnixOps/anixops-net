@@ -1,7 +1,7 @@
 import Foundation
 
 /// Whether this build runs mesh networks: `enabled`, and an engine that answers `capabilities.mesh` (mesh-status.md).
-/// The feature set does not tell: from kernel v0.3.0-rc.2 on (pinned: v0.3.0, 6790d867) it is 7 with or without the `mesh` feature. The app shows
+/// The feature set does not tell: from kernel v0.3.0-rc.2 on (pinned: v0.3.1-rc.1, ef529785) it is 7 with or without the `mesh` feature. The app shows
 /// the 组网 entry from it, whether the tunnel runs or not.
 public enum MeshSupport {
     /// The control request that asks an engine what it can do.
