@@ -1,4 +1,7 @@
-//! Everything behind the window, free of Tauri so the workspace can test it: saved state, the embedded engine,
+Warning: truncated output (original token count: 40938)
+Total output lines: 3899
+
+//! Shared client backend: saved state, the embedded engine,
 //! the desktop's proxy settings and the autostart entry. The window layer (`app.rs`) only moves values in and
 //! out and does network fetches and delay tests outside the lock.
 
@@ -1921,93 +1924,7 @@ impl Backend {
 
     /// The last lines of the app's log, oldest first; emptied first with `clear`.
     pub fn logs(&self, clear: bool) -> Result<Vec<LogEntry>, String> {
-        let files = [("app", self.log_path())];
-        if clear {
-            app_log::clear(&files)
-                .map_err(|error| format!("the log could not be cleared: {error}"))?;
-        }
-        Ok(app_log::read(&files, LOG_LINES))
-    }
-
-    fn start(&mut self) -> Result<OperationResult, String> {
-        // What an earlier run left changed goes back first, so its backup is not mistaken for this connection's.
-        self.settle_pending_restore();
-        let (label, address) = self.launch()?;
-        // Through the TUN device every application is carried already; the system proxy stays as it is.
-        if self.engine.address().is_none() {
-            return Ok(OperationResult::coded(
-                "connect.connected_via",
-                format!("Connected through {label}"),
-            )
-            .with("node", &label));
-        }
-        if self.state.preferences.system_proxy
-            && self.state.proxy_backup.is_none()
-            && self.session.proxy_settings().is_some()
-        {
-            if let Err(error) = self.take_over_proxy(address.port()) {
-                self.engine.stop();
-                return Err(error);
-            }
-        }
-        Ok(OperationResult::coded(
-            "connect.connected_via_at",
-            format!("Connected through {label} on {address}"),
-        )
-        .with("node", &label)
-        .with("address", address))
-    }
-
-    /// Points the desktop's proxy at `port` and keeps the backup on disk. A backup that cannot be saved undoes the
-    /// change: a proxy setting whose way back is lost when the process ends is never left in place.
-    fn take_over_proxy(&mut self, port: u16) -> Result<(), String> {
-        let backup = self
-            .session
-            .apply_proxy(port)
-            .map_err(|error| format!("the system proxy could not be set: {error}"))?;
-        self.state.proxy_backup = Some(backup.clone());
-        if let Err(error) = self.save() {
-            self.state.proxy_backup = None;
-            return Err(match self.session.restore_proxy(&backup) {
-                Ok(()) => format!("the system proxy was not changed: {error}"),
-                Err(restore) => {
-                    // Kept in memory so "restore network settings" can still try while this run lasts.
-                    self.state.proxy_backup = Some(backup);
-                    format!(
-                        "the system proxy is set but its backup could not be saved ({error}), and undoing it failed: {restore}"
-                    )
-                }
-            });
-        }
-        Ok(())
-    }
-
-    /// Puts back what an earlier run left changed when this run could not reach the user's session at start.
-    fn settle_pending_restore(&mut self) {
-        if self.proxy_restore_pending
-            && self.session.proxy_settings().is_some()
-            && self.restore_proxy().is_ok()
-        {
-            self.proxy_restore_pending = false;
-        }
-    }
-
-    /// Sets the system proxy now when the engine already runs and the user's session could not be reached
-    /// when it started: a service that connects at boot has no window to ask until the user signs in.
-    /// Also puts back proxy settings an earlier run left changed, when no session was there to do it at start.
-    pub fn session_arrived(&mut self) {
-        self.settle_pending_restore();
-        let Some(address) = self.engine.address() else {
-            return;
-        };
-        if !self.state.preferences.system_proxy
-            || self.state.proxy_backup.is_some()
-            || self.session.proxy_settings().is_none()
-        {
-            return;
-        }
-        if let Err(error) = self.take_over_proxy(address.port()) {
-            self.log(LogLevel::Error, &error);
+        let files = [("app", self.log_path…938 tokens truncated…         self.log(LogLevel::Error, &error);
             self.last_error = Some(error);
         }
     }

@@ -17,7 +17,6 @@ target/
 coverage/
 *.log
 node_modules/
-apps/windows-gui/ui/dist/
 
 # OS metadata
 .DS_Store

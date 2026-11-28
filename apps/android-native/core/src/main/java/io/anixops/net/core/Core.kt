@@ -23,7 +23,7 @@ import kotlinx.serialization.json.putJsonObject
 /**
  * Typed commands over the client. Every call runs on [dispatcher] (commands may block for long: downloads,
  * delay tests, the VPN consent) and throws [CoreException] when the client refuses. Names and arguments are the
- * shared interface's (`apps/windows-gui/ui/src/bridge.ts`); page logic is the client's `view.*` commands
+ * shared client core's; page logic is the client's `view.*` commands
  * (crates/client-view), so every client shows the same thing. Results and refusals come back in the app's language
  * ([texts]): a screen shows [OperationResult.message] and [CoreException.message] as they are.
  */

@@ -19,3 +19,7 @@ repeat the file installation and run `sudo systemctl restart anixops-netd.servic
 To remove a manual installation, stop and disable the service, remove the unit and
 daemon installed above, reload systemd and delete the extracted directory.
 Subscriptions and settings are kept under `/var/lib/anixops-net`.
+
+When upgrading from the former desktop client, its user configuration remains
+under `${XDG_CONFIG_HOME:-$HOME/.config}/anixops-net`. The system service uses
+its own data directory. Import your subscriptions in the native app.

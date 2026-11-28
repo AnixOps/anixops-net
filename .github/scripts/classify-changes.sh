@@ -9,9 +9,9 @@
 # .github/scripts/classify-changes.test.sh pins the mapping for representative paths.
 set -euo pipefail
 
-rust=false; ui=false; windows=false; linux=false; apple=false; android_native=false
+rust=false; windows=false; apple=false; android_native=false
 windows_native=false; linux_native=false
-all() { rust=true; ui=true; windows=true; linux=true; apple=true; android_native=true; windows_native=true; linux_native=true; }
+all() { rust=true; windows=true; apple=true; android_native=true; windows_native=true; linux_native=true; }
 
 while IFS= read -r path; do
   case "${path}" in
@@ -20,16 +20,9 @@ while IFS= read -r path; do
     # cargo-deny's rules (rust-deps) and cargo's own settings (every build).
     Cargo.toml | Cargo.lock | .github/* | deny.toml | .cargo/* | rust-toolchain | rust-toolchain.toml) all ;;
     # AnixOps Design, vendored: every client's colours are generated from it.
-    apps/windows-gui/ui/src/design/*)
-      ui=true; windows=true; linux=true; android_native=true; apple=true; windows_native=true
-      linux_native=true ;;
-    apps/windows-gui/ui/*) ui=true; windows=true; linux=true ;;
-    # The native client's installer; the native job builds it and installs, upgrades and removes it.
+    third_party/anixops-design/*) all ;;
     installer/windows-native/*) windows_native=true ;;
-    apps/windows-gui/* | installer/*) rust=true; windows=true ;;
-    # The anixops:// handler the Windows client registers; the Windows job builds, tests and packages it.
-    apps/windows-link/*) rust=true; windows=true ;;
-    apps/linux-gui/*) rust=true; linux=true ;;
+    installer/linux/*) linux_native=true ;;
     # The Linux daemon; the workspace job builds and tests it, and the native window is run against it.
     apps/linux-daemon/*) rust=true; linux_native=true ;;
     # The Windows service; the Windows job builds and tests it, and the native app is tested against it.
@@ -45,18 +38,14 @@ while IFS= read -r path; do
     apps/android-native/*) rust=true; android_native=true ;;
     apps/ios/Design/*) apple=true; android_native=true; windows_native=true; linux_native=true ;;
     crates/client-ipc/fixtures/* | crates/client-service/fixtures/*)
-      rust=true; windows=true; linux=true; android_native=true; windows_native=true ;;
+      rust=true; windows=true; android_native=true; windows_native=true ;;
     # The native Windows app is tested against the real service, which is built from these; the
     # native Linux window takes its wording from crates/client-strings.
     crates/*)
-      rust=true; windows=true; linux=true; android_native=true; windows_native=true
+      rust=true; windows=true; android_native=true; windows_native=true
       linux_native=true ;;
     apps/ios/*) apple=true ;;
-    # The desktop UI and the native Android app bundle TERMS.md (first-start consent; the Android
-    # screenshots show it) and PRIVACY.md (Settings › About), and the Apple tests check both. The Windows
-    # and Linux desktop jobs only package the interface the ui job builds and tests, so the text needs
-    # nothing from them.
-    TERMS.md | PRIVACY.md) ui=true; apple=true; android_native=true ;;
+    TERMS.md | PRIVACY.md) apple=true; android_native=true ;;
     # Documentation and repository metadata no job reads. A README.md inside a crate or app is not here: the
     # build can read it (rustdoc include_str!).
     docs/* | LICENSE | .gitignore) ;;
@@ -67,9 +56,7 @@ while IFS= read -r path; do
 done
 
 echo "rust=${rust}"
-echo "ui=${ui}"
 echo "windows=${windows}"
-echo "linux=${linux}"
 echo "apple=${apple}"
 echo "android_native=${android_native}"
 echo "windows_native=${windows_native}"

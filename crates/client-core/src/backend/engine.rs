@@ -358,7 +358,7 @@ fn linked(profile: &Value, other: &OtherSource) -> Option<Value> {
 /// status, join and leave. Mode and group changes go through the saved profile instead. What only the backend
 /// sends (the capture session storage and key, saved sessions, `reload_rules`, saving a mesh network) is not here:
 /// it goes through [`Engine::request`]. The
-/// Windows/Linux Tauri app checks its window's requests with the same list ([`activity_request`]).
+/// Native desktop callers use the same activity request contract ([`activity_request`]).
 pub const ACTIVITY_COMMANDS: [&str; 33] = [
     "traffic",
     "connections",

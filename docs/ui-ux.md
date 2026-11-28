@@ -15,30 +15,19 @@
 
 ## 强调级别对应的组件
 
-| 级别 | 含义 | 桌面端（`apps/windows-gui/ui`） | Apple 平台（SwiftUI） |
+| 级别 | 含义 | Windows / Linux | Apple 平台（SwiftUI） |
 |---|---|---|---|
-| E1 主操作 | 这个界面就是为它存在，每个界面最多一个 | `button.primary` | `.borderedProminent`，概览里是连接开关 |
-| E2 次操作 | 主操作之外有用的选择 | `button.secondary`（行内加 `compact`） | `.bordered` |
-| E3 轻操作 | 常用但次要：刷新、复制、打开、“全部 ›” | `button.link-button`、`IconButton` | `.link`、`.plain`、`.borderless` |
-| E4 破坏性 | 删除数据、断开连接、移除系统组件 | `MoreMenu` 里的 `danger` 项，或 `ConfirmButton` | `Menu` 里的 `Button(role: .destructive)` 加确认 |
+| E1 主操作 | 这个界面就是为它存在，每个界面最多一个 | WinUI `AccentButtonStyle`、GTK `suggested-action` | `.borderedProminent`，概览里是连接开关 |
+| E2 次操作 | 主操作之外有用的选择 | 原生默认按钮 | `.bordered` |
+| E3 轻操作 | 常用但次要：刷新、复制、打开、“全部 ›” | 原生链接或图标按钮 | `.link`、`.plain`、`.borderless` |
+| E4 破坏性 | 删除数据、断开连接、移除系统组件 | 原生菜单项或对话框，删除前确认 | `Menu` 里的 `Button(role: .destructive)` 加确认 |
 
-即时生效的开关用 `Switch` / `Toggle`，二到四个互斥模式用 `Segmented` / 分段 `Picker`，都不用按钮代替。
+即时生效的设置用 WinUI ToggleSwitch、GTK Switch 或 SwiftUI Toggle。互斥模式用原生分段控件或单选项。
 
 ## 桌面端的控件和字体
 
-桌面端（Windows、Linux，`apps/windows-gui/ui`）的外观自己画，行为交给 React Aria Components，统一封装在 `src/controls.tsx`：
-
-| 要做的事 | 用哪个组件 | 不要用 |
-|---|---|---|
-| 从几个值里选一个 | `Select` | 浏览器的 `<select>` |
-| 行或分区的“更多”操作 | `MoreMenu` | 自己定位的浮层 |
-| 图标按钮和它的悬停说明 | `IconButton`（内含 `Tip`） | `title` 属性 |
-| 盖住整个窗口的对话框 | `ModalDialog`，标题用 `<Heading slot="title">` | 自己写 `role="dialog"` 的遮罩 |
-
-这些组件自带方向键、首字母定位、Esc 关闭、焦点圈定与归还、弹层不出窗口。新控件先看 React Aria Components 有没有，再考虑手写。
-
-字体用各平台的系统界面字体（Windows 是 Segoe UI Variable 配微软雅黑 UI，Linux 跟随桌面设置），不加载设计仓库附带的 Inter；
-字体栈在 `styles.css` 的 `--font-sans`、`--font-mono`。字号、字重仍以 AnixOps Design 的 tokens 为准。
+Windows 使用 WinUI 3，Linux 使用 GTK 4／libadwaita。以 macOS 客户端的布局、信息层级和品牌色为视觉参考，
+各平台沿用原生选择器、菜单、对话框、焦点管理和系统字体。品牌色来自共用的 AnixOps Design tokens。
 
 ## 作用范围对应的位置
 
@@ -72,26 +61,19 @@
     `CFBundleDevelopmentRegion` 是 `en`（`apps/ios/project.yml`），系统找不到匹配语言时回退到英文；Info.plist 里的权限说明
     以英文为准，中文在 `InfoPlist.xcstrings`。
   - Android：英文在默认的 `values/`，简体中文在 `values-zh/`，繁体中文在 `values-zh-rTW/`（`LanguageTest`）。
-  - 桌面（Windows、Linux）：`resolveLanguage`（`apps/windows-gui/ui/src/i18n.ts`）；原生预览：`client-strings` 的
-    `preferred()` 与 `Strings.Preferred`。
+  - Windows 和 Linux 使用 `client-strings` 的 `preferred()` 与 `Strings.Preferred`。
   新平台或新的语言判断照此实现，并加一条“日语系统显示英文”的测试。
 - 后端（Windows 桌面后端、`client-core`、内核）的结果和拒绝原因不直接显示英文原文：
-  - 结果（`OperationResult`）带稳定的 `code`、`params`、`follow`，各端按代码用自己的文案表显示（桌面 `operation-text.ts`，
-    Android `CoreTexts`），`message` 只是英文后备和日志。
+  - 结果（`OperationResult`）的 `code`、`params`、`follow` 用于本地化，`message` 用作英文后备和日志。
   - 拒绝原因仍是一个字符串；带代码的写成 `<code>: <English>`（`crates/client-core/src/refusal.rs`，客户端自己的代码是
     `error.<name>`，内核的 `DomainError` 本来就是这个形式，例如 `subscription.core.clash_yaml_unsupported: …`）。认识的代码显示
     本端文案；不认识的只显示“什么失败了”（“连接失败”“操作没有完成”），英文原文放在“详情”里（桌面提示条的折叠详情，
     行内显示时放在括号里），日志和诊断报告保留英文。新增拒绝原因时给它代码，并在各端文案表里补三种语言（测试会检查）。
-  - 客户端作为状态保存的拒绝原因（快照的 `lastError`、`configurationError`、`subscriptionError`，订阅的 `lastUpdateError`，以及
-    `view.overview`、`view.subscriptions` 原样转交的 `error`）同样按代码显示，不能原样上屏：桌面用 `errorLine`，订阅卡片和行用
-    `subscriptionFailureLine`（Windows 有 `errorCode` 时按它，Linux 只有拒绝原因时按其中的 `subscription.core.*` 代码），Android 由
-    `Core.overview`、`Core.subscriptions` 经 `CoreTexts.refusalText` 换成 App 语言的文案，连接条和订阅行显示的已是本端文案。
+  - 状态数据中的拒绝原因也用本地化文案显示，详情和日志可以保留英文原文。
   - 规则导入时跳过的内容按内核代码显示类别（跳过了规则、策略组、成员、忽略的选项），内核的英文句子作为明细。
 - 一词多义要分开写。“连接”“代理”在英文里各对应几个词：单独的“连接”只用作连接列表（Connections），单独的“代理”只用作页面名（Proxies）。
-  动作“连接”、连接开关、模式名“代理”、规则策略“代理”各用自己的文案：桌面端写成带含义的键（`"连接|verb"`、`"连接|noun"`、
-  `"代理|mode"`，竖线后的含义只用于查表，中文界面显示竖线前的部分，见 `apps/windows-gui/ui/src/i18n.ts`），Apple 端用
-  `action.connect`、`mode.proxy`、`policy.proxy`，Android 用各自独立的资源名。`i18n.test.ts` 检查单独的“连接”“代理”只出现在允许的位置。
-- 开关的无障碍名称写它控制的对象（“连接”），不随状态改成“断开”；开和关只由开关状态（`aria-checked`）表达。
+  动作“连接”、连接开关、模式名“代理”和规则策略“代理”各用独立的文案键，各端使用自己的本地化资源。
+- 开关的无障碍名称写它控制的对象（“连接”），不随状态改成“断开”；开和关只由开关状态表达。
 
 ## 界面文案
 
@@ -294,16 +276,8 @@ macOS / iOS 用 XCUITest 的 `performAccessibilityAudit`（对比度、文字被
 
 界面细节靠截图对比把关，不靠人记得去看。
 
-- **桌面端（Windows / Linux 共用的界面）**：`UI screenshots` 工作流用演示数据（`apps/windows-gui/ui/screenshots/mock.js`）逐页画出界面（`render.cjs` 里的清单），在 PR 上把基线提交用同样的方法再画一遍，逐张比对。时钟固定、动效关闭、没有随机数，同一份构建画多少次像素都一样，所以任何差异都是这个 PR 造成的。
-- 有差异的截图必须在 PR 描述里确认，否则工作流失败。看过产物 `ui-screenshots-<sha>` 里 `report/<截图名>/` 下的 `before.png`、`after.png`、`diff.png`，确认是想要的变化后，在描述里加一行，改完描述工作流会自己重跑：
-
-  ```
-  界面变化：debug-requests-light, debug-inspector-*
-  ```
-
-  名字用逗号或空格隔开，`*` 代表任意一段字符。新增和删除的截图同样要列出。确认了却没有变化的名字会在报告里提示。
-- 新页面或新状态要在 `render.cjs` 的清单里加一张截图；后端多了页面要用的命令，在 `mock.js` 里补上它的演示数据。
-- **macOS**：CI 的 “macOS screenshots, UI tests and accessibility audit” 用 “iOS and macOS Xcode build” 构建好的调试版 App、演示数据逐页截图（`.github/scripts/mac-screenshots.sh`）。main 上每次改到 Apple 端的提交都会把截图存成 `mac-screenshots-<sha>`（保留 30 天）；PR 上拿自己的截图和基线提交往前最近的一份 main 截图逐张比对（`screenshot-compare.sh`），规则和桌面端一样，截图名前面加 `mac-`：
+- **Windows 和 Linux**：原生 CI 作业上传各自的界面截图。审查 PR 时用截图核对布局、主题和原生交互，并在 PR 里说明变化。
+- **macOS**：CI 的 “macOS screenshots, UI tests and accessibility audit” 用 “iOS and macOS Xcode build” 构建好的调试版 App、演示数据逐页截图（`.github/scripts/mac-screenshots.sh`）。main 上每次改到 Apple 端的提交都会把截图存成 `mac-screenshots-<sha>`（保留 30 天）；PR 上拿自己的截图和基线提交往前最近的一份 main 截图逐张比对（`screenshot-compare.sh`），有差异时在 PR 描述中用 `界面变化：` 声明确认的截图，截图名加 `mac-`：
 
   ```
   界面变化：mac-proxies-*, mac-palette-light

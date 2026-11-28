@@ -5,8 +5,6 @@ Inputs (each optional, as the artifact needs):
   --cargo LABEL=PATH     `cargo about generate --format json` output for one Cargo workspace (the client's
                          Cargo.lock, or the kernel's for the binaries built from it). Every crate's license text
                          comes from the crate itself (cargo-about), grouped by text. AnixOps's own crates are left out.
-  --pnpm PATH            `pnpm licenses list --prod --json` of the desktop interface; license files are read from
-                         the installed packages.
   --gradle-deps PATH     `gradle :app:dependencies --configuration releaseRuntimeClasspath` of the Android app;
                          each module's license comes from its POM (following parent POMs) in --gradle-cache, or from
                          the Maven repository when the cache has no POM. Only Apache-2.0 modules are accepted (its
@@ -34,7 +32,6 @@ import xml.etree.ElementTree as ElementTree
 
 PROJECT_SOURCE = "https://github.com/AnixOps/anixops-net"
 OWN_REPOSITORIES = ("https://github.com/AnixOps/",)
-LICENSE_FILE = re.compile(r"^(LICEN[CS]E|COPYING|NOTICE)([-._].*)?$", re.I)
 APACHE_NAMES = re.compile(r"apache.*(2\.0|version 2)|^apache-2\.0$|apache license, version 2\.0", re.I)
 APACHE_URLS = ("apache.org/licenses/license-2.0",)
 MAVEN_REPOSITORIES = ("https://dl.google.com/dl/android/maven2", "https://repo.maven.apache.org/maven2")
@@ -99,56 +96,6 @@ def read_cargo(label, path):
             for user in users:
                 mpl.append({"name": user["name"], "version": user["version"], "source": crate_source_url(user),
                             "repository": user.get("repository") or ""})
-    return components, texts, mpl, errors
-
-
-# --- pnpm ----------------------------------------------------------------------------------------------------------
-
-def license_files(directory):
-    if not directory or not os.path.isdir(directory):
-        return []
-    found = []
-    for name in sorted(os.listdir(directory)):
-        full = os.path.join(directory, name)
-        if os.path.isfile(full) and LICENSE_FILE.match(name):
-            found.append(full)
-    return found
-
-
-def read_pnpm(path):
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)
-    components, texts, mpl, errors = [], [], [], []
-    for license_id, packages in sorted(data.items()):
-        for package in packages:
-            versions = package.get("versions") or ([package["version"]] if package.get("version") else [])
-            paths = package.get("paths") or ([package["path"]] if package.get("path") else [])
-            for index, version in enumerate(versions or ["?"]):
-                directory = paths[index] if index < len(paths) else (paths[0] if paths else "")
-                components.append({
-                    "ecosystem": "npm package (desktop interface)",
-                    "name": package["name"],
-                    "version": version,
-                    "license": package.get("license") or license_id,
-                    "source": package.get("homepage") or "",
-                })
-                files = license_files(directory)
-                if files:
-                    body = "\n\n".join(read_text(file) for file in files)
-                else:
-                    body = (f"The package ships no license file. License: {package.get('license') or license_id}"
-                            + (f"; author: {package['author']}" if package.get("author") else "")
-                            + (f"; see {package['homepage']}" if package.get("homepage") else "") + ".")
-                texts.append({
-                    "title": f"{package['name']} {version} ({package.get('license') or license_id})",
-                    "users": [f"{package['name']} {version}"],
-                    "text": body,
-                })
-                if "MPL-2.0" in (package.get("license") or license_id):
-                    mpl.append({"name": package["name"], "version": version,
-                                "source": f"https://registry.npmjs.org/{package['name']}/-/"
-                                          f"{package['name'].split('/')[-1]}-{version}.tgz",
-                                "repository": package.get("homepage") or ""})
     return components, texts, mpl, errors
 
 
@@ -306,7 +253,7 @@ def render(title, components, texts, mpl, extras):
 
 def build(args):
     title = out_path = None
-    cargo, pnpm, extras, required = [], None, [], []
+    cargo, extras, required = [], [], []
     gradle_deps = gradle_cache = apache_text = None
     rest = list(args)
     while rest:
@@ -323,8 +270,6 @@ def build(args):
             if not path:
                 raise NoticeError("--cargo takes LABEL=PATH")
             cargo.append((label, path))
-        elif option == "--pnpm":
-            pnpm = value
         elif option == "--gradle-deps":
             gradle_deps = value
         elif option == "--gradle-cache":
@@ -345,9 +290,6 @@ def build(args):
     components, texts, mpl, errors = [], [], [], []
     for label, path in cargo:
         parts = read_cargo(label, path)
-        components += parts[0]; texts += parts[1]; mpl += parts[2]; errors += parts[3]
-    if pnpm:
-        parts = read_pnpm(pnpm)
         components += parts[0]; texts += parts[1]; mpl += parts[2]; errors += parts[3]
     if gradle_deps:
         parts = read_gradle(gradle_deps, gradle_cache, apache_text)
@@ -409,10 +351,6 @@ def self_test():
         "overview": [], "licenses": [],
         "crates": [{"package": crate("mystery", "1.0.0", None), "license": "Unknown"}],
     })
-    react_dir = os.path.join(work, "node_modules", "react")
-    write("node_modules/react/LICENSE", "MIT License\nCopyright (c) Meta Platforms")
-    pnpm_json = write("pnpm.json", {"MIT": [{"name": "react", "versions": ["19.0.0"], "paths": [react_dir],
-                                              "license": "MIT", "homepage": "https://react.dev"}]})
     apache = write("LICENSE", "Apache License\nVersion 2.0, January 2004")
     cache = os.path.join(work, "gradle")
     write("gradle/androidx.core/core/1.16.0/abc/core-1.16.0.pom",
@@ -448,14 +386,14 @@ def self_test():
         if ok != want_ok:
             failures.append(f"{label}: expected {'success' if want_ok else 'failure'} {detail}")
 
-    run("cargo, pnpm, gradle and extra", ["--cargo", f"client={cargo_ok}", "--pnpm", pnpm_json,
+    run("cargo, gradle and extra", ["--cargo", f"client={cargo_ok}",
                                          "--gradle-deps", gradle_ok, "--gradle-cache", cache, "--apache-text", apache,
-                                         "--extra", extra, "--require", "ring", "--require", "react",
+                                         "--extra", extra, "--require", "ring",
                                          "--require", "QuickJS-ng"], True)
     text = read_text(out) if os.path.exists(out) else ""
     for expected in ["cssparser 0.36.0: https://crates.io/api/v1/crates/cssparser/0.36.0/download",
-                     "ring 0.17.14 [Apache-2.0 AND ISC]", "netstack-smoltcp 0.2.4", "react 19.0.0 [MIT]",
-                     "Copyright (c) Meta Platforms", "androidx.core:core 1.16.0 [Apache-2.0]",
+                     "ring 0.17.14 [Apache-2.0 AND ISC]", "netstack-smoltcp 0.2.4",
+                     "androidx.core:core 1.16.0 [Apache-2.0]",
                      "com.google.guava:listenablefuture 1.0", "QuickJS-ng (bundled)", "MPL text", PROJECT_SOURCE]:
         if expected not in text:
             failures.append(f"output lacks {expected!r}")

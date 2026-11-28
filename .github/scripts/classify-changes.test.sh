@@ -4,7 +4,7 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 failures=0
-all_jobs="android_native apple linux linux_native rust ui windows windows_native"
+all_jobs="android_native apple linux_native rust windows windows_native"
 
 selected() {
   printf '%s\n' "$@" | bash "${here}/classify-changes.sh" | awk -F= '$2 == "true" { print $1 }' | sort | xargs
@@ -25,7 +25,7 @@ expect() {
   fi
 }
 
-shared_rust="rust windows linux android_native windows_native linux_native"
+shared_rust="rust windows android_native windows_native linux_native"
 
 # Rust tool configuration: every Rust job reads it (F15).
 expect deny.toml all
@@ -41,12 +41,10 @@ expect new-folder/file.txt all
 expect crates/client-core/src/client.rs "${shared_rust}"
 expect crates/client-core/README.md "${shared_rust}"
 expect apps/ios/Sources/NetworkCoreAppHost/TunnelController.swift apple
-expect apps/windows-gui/ui/src/pages/RequestList.tsx "ui windows linux"
 expect apps/android-native/app/build.gradle.kts "rust android_native"
-expect apps/windows-link/src/lib.rs "rust windows"
 expect apps/windows-native/src/App.cs windows_native
-expect TERMS.md "ui apple android_native"
-expect PRIVACY.md "ui apple android_native"
+expect TERMS.md "apple android_native"
+expect PRIVACY.md "apple android_native"
 # Documentation only.
 expect docs/ui-ux.md none
 expect README.md none

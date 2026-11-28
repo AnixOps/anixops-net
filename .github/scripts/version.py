@@ -6,8 +6,6 @@ env!("CARGO_PKG_VERSION") in the subscription User-Agent, crash reports, metrics
 systems cannot read Cargo.toml, so they hold copies, which must equal it:
 
   Cargo.lock                                         every workspace member's entry (builds use --locked)
-  apps/windows-gui/tauri.conf.json, apps/linux-gui/tauri.conf.json   "version" (Windows file version, bundles)
-  apps/windows-gui/ui/package.json                   "version"
   apps/windows-native/Directory.Build.props          <Version>
   apps/windows-native/src/AnixOps.Net.App/app.manifest   assemblyIdentity version (X.Y.Z.0)
   apps/ios/project.yml                               MARKETING_VERSION (iOS and macOS CFBundleShortVersionString)
@@ -64,9 +62,6 @@ class Tree:
 # Each copy: (path, pattern whose group 2 is the version, how the version is written there).
 # Patterns keep groups 1 and 3 (the text around the version) so `set` rewrites only the version.
 COPIES = [
-    ("apps/windows-gui/tauri.conf.json", re.compile(r'(\A\{\s*(?:"[^"]*":\s*"[^"]*",\s*)*?"version":\s*")([^"]*)(")'), "{}"),
-    ("apps/linux-gui/tauri.conf.json", re.compile(r'(\A\{\s*(?:"[^"]*":\s*"[^"]*",\s*)*?"version":\s*")([^"]*)(")'), "{}"),
-    ("apps/windows-gui/ui/package.json", re.compile(r'(\A\{\s*(?:"[^"]*":\s*(?:"[^"]*"|true|false),\s*)*?"version":\s*")([^"]*)(")'), "{}"),
     ("apps/windows-native/Directory.Build.props", re.compile(r"(<Version>)([^<]*)(</Version>)"), "{}"),
     ("apps/windows-native/src/AnixOps.Net.App/app.manifest", re.compile(r'(<assemblyIdentity version=")([^"]*)(")'), "{}.0"),
     ("apps/ios/project.yml", re.compile(r'(^    MARKETING_VERSION: ")([^"]*)(")', re.M), "{}"),
@@ -213,19 +208,13 @@ FIXTURE = {
                   '[workspace.package]\nversion = "0.3.0"\nedition = "2021"\n\n[workspace.dependencies]\n'
                   'serde = { version = "1.0.0" }\n',
     "apps/a/Cargo.toml": '[package]\nname = "app-a"\nversion.workspace = true\n\n[dependencies]\n'
-                         'tauri = { version = "2" }\n',
+                         'gtk = { version = "2" }\n',
     "crates/b/Cargo.toml": '[package]\nname = "crate-b"\nversion.workspace = true\n',
     "Cargo.lock": '# generated\nversion = 4\n\n'
                   '[[package]]\nname = "app-a"\nversion = "0.3.0"\ndependencies = [\n "crate-b",\n]\n\n'
                   '[[package]]\nname = "crate-b"\nversion = "0.3.0"\n\n'
                   '[[package]]\nname = "dtor"\nversion = "0.3.0"\n'
                   'source = "registry+https://github.com/rust-lang/crates.io-index"\nchecksum = "00"\n',
-    "apps/windows-gui/tauri.conf.json": '{\n  "$schema": "https://schema.tauri.app/config/2",\n'
-                                        '  "productName": "AnixOps Net",\n  "version": "0.3.0",\n'
-                                        '  "plugins": { "x": { "version": "9.9.9" } }\n}\n',
-    "apps/linux-gui/tauri.conf.json": '{\n  "productName": "AnixOps Net",\n  "version": "0.3.0"\n}\n',
-    "apps/windows-gui/ui/package.json": '{\n  "name": "ui",\n  "private": true,\n  "version": "0.3.0",\n'
-                                        '  "dependencies": { "react": "19.0.0" }\n}\n',
     "apps/windows-native/Directory.Build.props": "<Project>\n  <PropertyGroup>\n    <Version>0.3.0</Version>\n"
                                                  "  </PropertyGroup>\n</Project>\n",
     "apps/windows-native/src/AnixOps.Net.App/app.manifest": '<?xml version="1.0" encoding="utf-8"?>\n'
@@ -287,12 +276,6 @@ def self_test():
         lock = f.read()
     if 'name = "dtor"\nversion = "0.3.0"' not in lock:
         failures.append("set changed a registry package that happens to share the version")
-    with open(os.path.join(bumped, "apps/windows-gui/tauri.conf.json"), encoding="utf-8") as f:
-        if '"version": "9.9.9"' not in f.read():
-            failures.append("set changed a nested version in tauri.conf.json")
-    with open(os.path.join(bumped, "apps/windows-gui/ui/package.json"), encoding="utf-8") as f:
-        if '"react": "19.0.0"' not in f.read():
-            failures.append("set changed a dependency version in package.json")
     with open(os.path.join(bumped, "apps/windows-native/src/AnixOps.Net.App/app.manifest"), encoding="utf-8") as f:
         if 'assemblyIdentity version="1.0.0.0"' not in f.read():
             failures.append("set did not write the four-part manifest version")

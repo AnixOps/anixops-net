@@ -1,5 +1,5 @@
 //! What the Windows clients keep for the whole machine under `%ProgramData%`, shared by the window client
-//! (`apps/windows-gui`) and the service (`apps/windows-service`):
+//! (for legacy data migration) and the service (`apps/windows-service`):
 //!
 //! - [`data_dir`]: the data folder, closed to everyone but the system and administrators, including what an
 //!   earlier version left in it open to all users;

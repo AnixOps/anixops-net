@@ -6,7 +6,7 @@ import io.anixops.net.core.CoreTexts
 
 /**
  * The client's result and refusal codes in the app's language (finding ux-i18n-a11y-02): the same words as the
- * desktop window (`apps/windows-gui/ui/src/operation-text.ts`, `error-text.ts`), from the string resources, so they
+ * shared client core, using Android string resources, so they
  * follow the app's language. Read through [context] on every call, so a language change applies at once.
  * CodeTextsTest checks that every code `crates/client-core` sends is here in all three languages.
  */

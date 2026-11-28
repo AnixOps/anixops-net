@@ -15,8 +15,7 @@ nodes, plugins and settings stay.
 | `core/` | Kotlin side of the bridge: `NativeCore`, the `{"ok"}` / `{"error"}` envelope, typed commands (`Core`) and models. No UI; JVM tests read the shared fixtures in `crates/client-core/tests/fixtures` |
 | `app/` | Compose UI (`ui/`), brand tokens (`ui/theme/BrandTokens.kt`, generated), and Android services (`platform/`: VpnService, Downloads, Keystore, network, notifications) |
 
-Commands keep the shared interface's names and JSON shapes (`apps/windows-gui/ui/src/bridge.ts`), so a page moved
-from the web interface calls the same command with the same arguments.
+The Android client uses the command names and JSON arguments of `client-core`.
 
 ## Build and checks
 

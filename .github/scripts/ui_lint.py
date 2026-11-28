@@ -5,7 +5,7 @@
     python3 .github/scripts/ui_lint.py --self-test
 
 Colours reach the interface only through the generated token files (.github/scripts/design_tokens.py): the
-Swift `brand.*` / `Brand.*` palette, the desktop CSS variables, BrandTokens.kt, BrandTokens.xaml and the GTK
+Swift `brand.*` / `Brand.*` palette, BrandTokens.kt, BrandTokens.xaml and the GTK
 brand-*.css. Every pair of those tokens is checked for contrast in AnixOps Design (guidelines/color.md), so a
 colour written anywhere else is a colour nobody checked, in one theme at least. Six rules, the first three about
 colour on every platform, the next three about the structure of the SwiftUI screens (Apple has no cheap runtime
@@ -96,11 +96,8 @@ SWIFT = (
 
 CSS_COLOUR = r"#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\(|(?<![-\w])(?:white|black)\b(?![-\w])"
 CSS = (
-    r("U1", CSS_COLOUR, "colour literal; use a token variable from design/tokens.css or the vendored tokens.css"),
+    r("U1", CSS_COLOUR, "colour literal; use a token variable from the generated GTK styles"),
     r("U2", r"\bcolor-mix\(|\balpha\(|\bmix\(", "derived colour; use a tint token (fill-1/2/3, *-soft, label-2/3, separator)"),
-)
-TSX = (
-    r("U1", r"""["'`]\s*(?:#[0-9a-fA-F]{3,8}|(?:rgba?|hsla?)\()""", "colour literal in a component; use a CSS token variable"),
 )
 KOTLIN = (
     r("U1", rf"\bColor\(\s*0x|\bColor\.(?:{KOTLIN_HUES})\b|\bColor\(\s*(?:red|0\.\d|\d+\s*,)", "colour literal; use a BrandTokens / MaterialTheme colour"),
@@ -124,10 +121,6 @@ RUST_GTK = (
 SCOPES = (
     Scope("Apple", ("apps/ios/Sources",), (".swift",),
           ("apps/ios/Sources/NetworkCoreAppHost/BrandTokens.swift",), SWIFT),
-    Scope("Desktop (Windows / Linux, web view)", ("apps/windows-gui/ui/src",), (".css",),
-          ("apps/windows-gui/ui/src/design/",), CSS),
-    Scope("Desktop components", ("apps/windows-gui/ui/src",), (".tsx",),
-          ("apps/windows-gui/ui/src/design/",), TSX),
     Scope("Android", ("apps/android-native/app/src/main",), (".kt",),
           ("apps/android-native/app/src/main/java/io/anixops/net/ui/theme/BrandTokens.kt",), KOTLIN),
     Scope("Windows native", ("apps/windows-native/src",), (".xaml",),
@@ -552,22 +545,6 @@ def xcstrings_entries(path: str, text: str) -> list[CopyEntry]:
     return out
 
 
-TS_PAIR = re.compile(r'^\s*("(?:[^"\\]|\\.)*")\s*:\s*("(?:[^"\\]|\\.)*")\s*,?\s*$', re.M)
-
-
-def ts_entries(path: str, text: str, lang: str, keys: bool) -> list[CopyEntry]:
-    """Desktop tables map the Chinese source text (the key) to English or Traditional Chinese."""
-    import json
-
-    out = []
-    for m in TS_PAIR.finditer(text):
-        key, value = json.loads(m.group(1)), json.loads(m.group(2))
-        if keys:
-            out.append(CopyEntry(path, key, "zh", key.split("|")[0]))
-        out.append(CopyEntry(path, key, lang, value))
-    return out
-
-
 def android_entries(path: str, text: str) -> list[CopyEntry]:
     import xml.etree.ElementTree as ET
 
@@ -599,10 +576,6 @@ def copy_entries(root: Path, files: list[str]) -> list[CopyEntry]:
     for path in files:
         if path.startswith("apps/ios/Sources/") and path.endswith(".xcstrings"):
             out.extend(xcstrings_entries(path, (root / path).read_text(encoding="utf-8")))
-        elif path == "apps/windows-gui/ui/src/i18n-en.ts":
-            out.extend(ts_entries(path, (root / path).read_text(encoding="utf-8"), "en", keys=True))
-        elif path == "apps/windows-gui/ui/src/i18n-zh-hant.ts":
-            out.extend(ts_entries(path, (root / path).read_text(encoding="utf-8"), "zh", keys=False))
         elif re.fullmatch(r"apps/android-native/app/src/main/res/values(?:-zh(?:-r\w+)?)?/strings\.xml", path):
             out.extend(android_entries(path, (root / path).read_text(encoding="utf-8")))
         elif path == "crates/client-strings/catalogue.json":
@@ -681,7 +654,7 @@ def run(root: Path) -> int:
                 continue
             if any(path.startswith(s) for s in scope.skip):
                 continue
-            if "/test/" in path or "/androidTest/" in path or path.endswith((".test.ts", ".test.tsx")):
+            if "/test/" in path or "/androidTest/" in path:
                 continue
             text = (root / path).read_text(encoding="utf-8")
             findings.extend(check_file(path, text, scope))
@@ -837,11 +810,7 @@ def self_test() -> int:
         if len(entries) != count:
             failed += 1
             print(f"self-test: {reader.__name__} read {len(entries)} entries, expected {count}")
-    ts = ts_entries("i18n-en.ts", '  "关闭|verb": "Close",\n  "你好": "Hello",\n', "en", keys=True)
-    if [(e.lang, e.text) for e in ts] != [("zh", "关闭"), ("en", "Close"), ("zh", "你好"), ("en", "Hello")]:
-        failed += 1
-        print(f"self-test: ts_entries gave {ts}")
-    total = len(cases) + len(structure) + len(lists) + len(pushes) + len(copy) + len(tables) + 1
+    total = len(cases) + len(structure) + len(lists) + len(pushes) + len(copy) + len(tables)
     print(f"ui_lint self-test: {total - failed}/{total} passed")
     return 1 if failed else 0
 

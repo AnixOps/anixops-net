@@ -67,7 +67,6 @@ MARKER = re.compile(r"network-behavior:\s*(\S[^*]*?)\s*(?:\*/)?$")
 NOT_NETWORK = {
     "schemas.microsoft.com",
     "schemas.android.com",
-    "schema.tauri.app",
     "www.apple.com",
     "www.w3.org",
     "www.freedesktop.org",
@@ -83,7 +82,7 @@ RESERVED_NAMES = {"example.com", "example.org", "example.net"}
 ADDRESS = re.compile(r"\b(?:https?|tls|quic)://([A-Za-z0-9.-]+)")
 
 SKIPPED_NAMES = {
-    "Cargo.toml", "Cargo.lock", "deny.toml", "package.json", "pnpm-lock.yaml", "LICENSE", "TRADEMARKS.md",
+    "Cargo.toml", "Cargo.lock", "deny.toml", "LICENSE", "TRADEMARKS.md",
     "gradle.properties", "libs.versions.toml", "settings.gradle.kts",
 }
 
@@ -91,7 +90,7 @@ SKIPPED_NAMES = {
 def not_packaged(path: str) -> bool:
     p = PurePosixPath(path)
     # third_party/notices/ holds license texts: their addresses are citations, never contacted.
-    if path.startswith(("docs/", "examples/", ".github/", "apps/windows-gui/ui/src/design/", "third_party/notices/")) \
+    if path.startswith(("docs/", "examples/", ".github/", "third_party/anixops-design/", "third_party/notices/")) \
             or p.suffix == ".md":
         return True
     if set(p.parts) & {"Tests", "tests", "test", "androidTest", "screenshots", "fixtures", "Tools"}:

@@ -1,5 +1,5 @@
 //! Refusals a window words itself. A refusal stays a `String` (the `{"error": …}` of every channel and the `Err` of
-//! every Tauri command); a coded one reads `<code>: <English>`, the form the kernel's `DomainError` already has
+//! native client commands); a coded one reads `<code>: <English>`, the form the kernel's `DomainError` already has
 //! (`subscription.core.clash_yaml_unsupported: …`). A window that knows the code shows its own words with the English
 //! as detail; the app log and diagnostics keep the English. Codes the client sets itself are `error.<name>`.
 

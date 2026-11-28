@@ -114,9 +114,8 @@ AnixOps Net 把这两件事放进同一个 App：
 |---|---|
 | `apps/ios` | iOS + macOS App、Packet Tunnel、Widget（Swift，XcodeGen 生成工程） |
 | `apps/android-native` | 安卓 App（Kotlin + Jetpack Compose，VpnService，经 JNI 调 `crates/client-core`），见 [README](apps/android-native/README.md) |
-| `apps/windows-gui` | Windows 桌面 App；`ui/` 是 Windows 与 Linux 共用的界面 |
-| `apps/linux-gui` | Linux 桌面 App |
-| `apps/windows-native`、`apps/linux-native` | 正在开发的原生桌面界面（WinUI 3、GTK 4 + libadwaita），见 [desktop-native.md](docs/architecture/desktop-native.md) |
+| `apps/windows-native` · `apps/windows-service` | Windows WinUI 3 客户端与核心服务 |
+| `apps/linux-native` · `apps/linux-daemon` | Linux GTK 4／libadwaita 客户端与守护进程 |
 | `apps/windows-service`、`apps/linux-daemon` | 原生桌面界面用的系统服务，在后台运行内核 |
 | `crates/` | 共用的客户端服务层：状态与内核控制（`client-core`）、DNS 与规则数据、MITM 映射、流量统计、日志、通知等 |
 | `installer/windows` | WiX MSI 安装器 |

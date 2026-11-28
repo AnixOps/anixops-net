@@ -92,8 +92,6 @@ flowchart TB
         GT -- "Unix socket · client-ipc 帧" --> LD
     end
 
-    TAURI["过渡期桌面版（Tauri）<br/>apps/windows-gui · apps/linux-gui<br/>原生版功能对齐后删除"]
-
     CORE2["client-core<br/>状态 · 订阅 · 规则 · DNS · MITM 配置 · ANX 授权"]
     ENG["engine-embedded（内核）"]
 
@@ -101,7 +99,6 @@ flowchart TB
     JNI --> CORE2
     WS -- "client-service" --> CORE2
     LD -- "client-service" --> CORE2
-    TAURI --> CORE2
     CORE2 --> ENG
 ```
 

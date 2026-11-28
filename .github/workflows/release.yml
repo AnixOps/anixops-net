@@ -12,6 +12,9 @@ on:
   pull_request:
     paths:
       - .github/workflows/release.yml
+      - .github/actions/third-party-notices/**
+      - .github/scripts/third_party_notices.py
+      - Cargo.lock
       - installer/linux/**
       - installer/windows-native/**
   workflow_dispatch:

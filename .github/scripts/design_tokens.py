@@ -8,8 +8,6 @@ apps/ios/Design/tokens.json maps AnixOps Net's token names onto AnixOps Design t
 vendored AnixOps Design tokens.json (see .github/scripts/sync_design.py). Outputs:
 
     apps/ios/Sources/NetworkCoreAppHost/BrandTokens.swift   (iOS, iPadOS, macOS, widget)
-    apps/windows-gui/ui/src/design/tokens.css               (Windows and Linux desktop: aliases over the
-                                                             vendored tokens.css, which styles.css imports first)
     apps/android-native/app/src/main/java/io/anixops/net/ui/theme/BrandTokens.kt   (native Android)
     apps/windows-native/src/AnixOps.Net.App/Theme/BrandTokens.xaml                 (native Windows)
     apps/linux-native/data/brand-light.css, brand-dark.css                         (native Linux)
@@ -27,7 +25,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "apps/ios/Design/tokens.json"
 SWIFT_OUT = ROOT / "apps/ios/Sources/NetworkCoreAppHost/BrandTokens.swift"
-CSS_OUT = ROOT / "apps/windows-gui/ui/src/design/tokens.css"
 KOTLIN_OUT = ROOT / "apps/android-native/app/src/main/java/io/anixops/net/ui/theme/BrandTokens.kt"
 XAML_OUT = ROOT / "apps/windows-native/src/AnixOps.Net.App/Theme/BrandTokens.xaml"
 GTK_OUT = {theme: ROOT / f"apps/linux-native/data/brand-{theme}.css" for theme in ("light", "dark")}
@@ -166,36 +163,6 @@ def swift(tokens: dict, upstream: dict, version: str) -> str:
         if style["weight"] not in WEIGHTS:
             fail(f"typography.{name}.weight = {style['weight']!r} is unknown")
         out.append(f"    static let {name} = Font.{style['ios']}.weight(.{style['weight']})")
-    out += ["}", ""]
-    return "\n".join(out)
-
-
-def css(tokens: dict, upstream: dict, version: str) -> str:
-    known = set(re.findall(r"--([a-z0-9-]+)\s*:", (ROOT / tokens["upstream"]).with_name("tokens.css").read_text("utf-8")))
-    brand = brand_colors(tokens, upstream)
-    known |= {f"net-{kebab(name)}" for name in brand}
-    out = [
-        f"/* {HEADER.format(version=version)} */",
-        "/* AnixOps Net names over the AnixOps Design variables in ./anixops/tokens.css, which defines both themes:",
-        "   these aliases resolve per theme because they are declared on the same root element. */",
-        "",
-        ":root {",
-    ]
-    for name, value in brand.items():
-        out.append(f"  --net-{kebab(name)}: {value.lower() if HEX.match(value) else value};")
-    for name, ref in tokens["desktop"].items():
-        if ref not in known:
-            fail(f"desktop.{name} refers to --{ref}, which neither AnixOps Design nor brand defines")
-        out.append(f"  --{name}: var(--{ref});")
-    type_steps = upstream["type"]
-    for name, style in tokens["typography"].items():
-        step = type_steps.get(style["desktop"])
-        if step is None:
-            fail(f"typography.{name}.desktop = {style['desktop']!r} is not an AnixOps Design type step")
-        weight = {"regular": 400, "medium": 500, "semibold": 600, "bold": 700}[style["weight"]]
-        size = number(px(value_of(step, style["desktop"])["fontSize"], style["desktop"]))
-        line = number(value_of(step, style["desktop"])["lineHeight"])
-        out.append(f"  --font-{name}: {weight} {size}px/{line} var(--font-sans);")
     out += ["}", ""]
     return "\n".join(out)
 
@@ -423,7 +390,6 @@ def main() -> None:
     stale = []
     outputs = (
         (SWIFT_OUT, swift(tokens, upstream, version)),
-        (CSS_OUT, css(tokens, upstream, version)),
         (KOTLIN_OUT, kotlin(tokens, upstream, version)),
         (XAML_OUT, xaml(tokens, upstream, version)),
         *((path, gtk(tokens, upstream, version, theme)) for theme, path in GTK_OUT.items()),

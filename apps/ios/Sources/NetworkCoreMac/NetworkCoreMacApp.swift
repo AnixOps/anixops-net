@@ -302,7 +302,7 @@ enum MacSection: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
-/// Glyph tile colors shared with the desktop client (apps/windows-gui/ui/src/styles.css `--tile-*`). They are the
+/// Glyph tile colors for the macOS client. They are the
 /// generated `Brand.tile*` tokens: light chart colours, so the white glyph stays at least 3:1 in both themes.
 enum MacTileColor {
     static let indigo = Brand.tileIndigo

@@ -15,7 +15,7 @@ if [ -n "${ANIXOPS_MESH_PREVIEW:-}" ] || [ -n "${ANIXOPS_MESH04_PREVIEW:-}" ]; t
 fi
 
 # Everything that configures a release build: the workflows other than ci.yml, the composite actions, the scripts
-# the workflows run, cargo's configuration and every build script, the desktop Tauri configuration, the Apple project
+# the workflows run, cargo's configuration and every build script, the Apple project
 # and package, and the Android build scripts.
 # Read without `mapfile` and associative arrays, which the macOS runners' bash 3.2 lacks (ios-testflight.yml runs
 # this there).
@@ -29,7 +29,6 @@ done < <(
         find .github/scripts -type f ! -name mesh-release-gate.sh
         find .cargo -type f
         find . -name build.rs -not -path './target/*' -not -path '*/node_modules/*' -not -path './.git/*'
-        find apps -name 'tauri.conf*.json' -not -path '*/node_modules/*'
         echo apps/ios/project.yml
         echo apps/ios/Package.swift
         find apps/android-native -name '*.gradle.kts' -not -path '*/build/*'
@@ -163,11 +162,6 @@ checks=(
     "crates/client-core/src/backend/mesh.rs|engine_runs_mesh|runs_mesh(ENABLED)|1"
     "crates/client-core/src/backend/mesh.rs|runs_mesh|set_allow_mesh(&mut profile, open)|1"
     "crates/client-core/src/backend/mesh.rs|check_envelope|with_allow_mesh_text(envelope)|1"
-    "apps/windows-gui/src/gui/tun_mode.rs|start_with|refuse_gated(envelope)|1"
-    "apps/windows-gui/src/gui/tun_mode.rs|start_with|mesh::with_allow_mesh_bytes(|1"
-    "apps/windows-gui/src/gui/actions/connection.rs|start_embedded|gated_envelope(envelope)|1"
-    "apps/windows-gui/src/gui/actions/connection.rs|gated_envelope|tun_mode::refuse_gated(envelope)|1"
-    "apps/windows-gui/src/gui/actions/connection.rs|gated_envelope|mesh::with_allow_mesh_bytes(envelope)|1"
     "apps/ios/Sources/NetworkCorePacketTunnel/PacketTunnelProvider.swift|beginTunnel|EmbeddedRuntimeConfig.meshGateFailure(of: |1"
     "apps/ios/Sources/NetworkCorePacketTunnel/PacketTunnelProvider.swift|beginMeshOnly|EmbeddedRuntimeConfig.meshGateFailure(of: |1"
     "apps/ios/Sources/NetworkCorePacketTunnel/PacketTunnelProvider.swift|handleAppMessage|EmbeddedRuntimeConfig.meshGateControlRefusal(|1"
