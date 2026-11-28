@@ -203,12 +203,14 @@ final class MeshGateTests: XCTestCase {
     }
 
     /// The first answer announces itself, so the entry can be read again; the same answer twice does not.
+    /// With the gate open the install also asks in the background, and whichever answer comes first posts: the
+    /// expectation is set before the install so that post is never missed.
     func testTheFirstAnswerPostsAvailabilityDidChange() {
         let reply = ReplyBox()
-        MeshSupport.installCapabilitiesProbe { reply.value }
-        defer { MeshSupport.installCapabilitiesProbe { nil } }
         reply.value = data(#"{"capabilities":{"mesh":true}}"#)
         let posted = expectation(forNotification: MeshSupport.availabilityDidChange, object: nil)
+        MeshSupport.installCapabilitiesProbe { reply.value }
+        defer { MeshSupport.installCapabilitiesProbe { nil } }
         XCTAssertEqual(MeshSupport.askEngine(), true)
         wait(for: [posted], timeout: 1)
         let again = expectation(forNotification: MeshSupport.availabilityDidChange, object: nil)
