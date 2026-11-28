@@ -107,7 +107,7 @@ def self_test() -> None:
         "shortcut without icon": (good.replace(' Icon="A.ico"', ""), 1),
         "no ARPPRODUCTICON": (good.replace('<Property Id="ARPPRODUCTICON" Value="A.ico" />', ""), 1),
         "undefined icon": (good.replace('Icon="A.ico" Advertise', 'Icon="B.ico" Advertise'), 1),
-        "missing file": (good.replace("icon.ico\"", "nothing.ico\""), 1),
+        "missing file": (good.replace("AnixOpsNet.ico\"", "nothing.ico\""), 1),
         "wrong file": (good.replace("windows-native\\src\\AnixOps.Net.App\\Assets\\AnixOpsNet.ico", "linux-native\\data\\anixops-net.png"), 1),
         "no shortcut": (good.replace('<File><Shortcut Id="S" Icon="A.ico" Advertise="yes" /></File>', ""), 1),
     }

@@ -822,22 +822,6 @@ pub(crate) fn allow_mesh_text(envelope: &str, open: bool) -> Result<String, Stri
     }
 }
 
-/// [`with_allow_mesh_text`] for an envelope in bytes (the Windows desktop's start paths). Bytes that are not text are
-/// refused while the gate is closed if they name mesh, else left to the engine to refuse.
-pub fn with_allow_mesh_bytes(envelope: &[u8]) -> Result<Vec<u8>, String> {
-    allow_mesh_bytes(envelope, ENABLED)
-}
-
-fn allow_mesh_bytes(envelope: &[u8], open: bool) -> Result<Vec<u8>, String> {
-    match std::str::from_utf8(envelope) {
-        Ok(text) => allow_mesh_text(text, open).map(String::into_bytes),
-        Err(_) if !open && envelope.windows(4).any(|window| window == b"mesh") => {
-            allow_mesh_text("mesh", open).map(String::into_bytes)
-        }
-        Err(_) => Ok(envelope.to_vec()),
-    }
-}
-
 /// An engine start error as a window shows it: the kernel's own refusal of a mesh outbound while `allow_mesh` is off
 /// (`config_rejected`, [`engine_embedded::config::MESH_NOT_ALLOWED`]) is the gated refusal, worded as the client's.
 pub fn map_kernel_refusal(error: String) -> String {
@@ -2007,18 +1991,6 @@ mod tests {
             allow_mesh_text(r#"{"outbound":{"type":"mesh""#, true),
             Ok(r#"{"outbound":{"type":"mesh""#.to_string())
         );
-    }
-
-    #[test]
-    fn bytes_get_the_same_gate() {
-        let closed = allow_mesh_bytes(br#"{"allow_mesh":true}"#, false).unwrap();
-        assert_eq!(closed, br#"{"allow_mesh":false}"#.to_vec());
-        let open = allow_mesh_bytes(br#"{}"#, true).unwrap();
-        assert_eq!(open, br#"{"allow_mesh":true}"#.to_vec());
-        let error = allow_mesh_bytes(b"\xff mesh", false).unwrap_err();
-        assert!(!is_gated_refusal(&error), "{error}");
-        assert_eq!(error, UNREADABLE_PROFILE);
-        assert_eq!(allow_mesh_bytes(b"\xff", false), Ok(b"\xff".to_vec()));
     }
 
     /// The kernel's own refusal is the client's gated one, in one wording.

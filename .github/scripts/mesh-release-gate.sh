@@ -156,7 +156,6 @@ checks=(
     "crates/client-core/src/backend/mesh.rs|joined_into|set_allow_mesh(&mut meshed, open)|1"
     "crates/client-core/src/backend/mesh.rs|with_allow_mesh|set_allow_mesh(config, ENABLED)|1"
     "crates/client-core/src/backend/mesh.rs|with_allow_mesh_text|allow_mesh_text(envelope, ENABLED)|1"
-    "crates/client-core/src/backend/mesh.rs|with_allow_mesh_bytes|allow_mesh_bytes(envelope, ENABLED)|1"
     "crates/client-core/src/backend/mesh.rs|start_envelope|prepared_start(envelope, ENABLED)|1"
     "crates/client-core/src/backend/mesh.rs|prepared_start|allow_mesh_text(envelope, open)|1"
     "crates/client-core/src/backend/mesh.rs|engine_runs_mesh|runs_mesh(ENABLED)|1"
@@ -200,7 +199,6 @@ helpers='(prepared_start|start_gated|through_proxy_gated|runs_mesh|joined_into|s
 # `(`, its own `fn`/`func` line not counted): exactly, not at least.
 writers=(
     "allow_mesh_text|5"
-    "allow_mesh_bytes|1"
     "set_allow_mesh|4"
     "prepared_start|2"
     "start_envelope|1"
@@ -208,10 +206,9 @@ writers=(
     "through_proxy_gated|1"
     "joined_into|1"
     "runs_mesh|1"
-    "check_envelope|7"
+    "check_envelope|5"
     "with_allow_mesh|0"
     "with_allow_mesh_text|1"
-    "with_allow_mesh_bytes|2"
     "withAllowMesh|2"
     "settingAllowMesh|2"
 )
