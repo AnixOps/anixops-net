@@ -152,14 +152,15 @@ fn all_members(status: &Value) -> Vec<Value> {
 fn project_member_name(status: &Value, member: &mut Value) {
     let names = list(status, "names");
     let network = &status["network"];
-    let suffix = text(network, "dnsSuffix").trim_matches('.');
+    let suffix = text(network, "dnsSuffix").trim_end_matches('.');
     let explicit = opt_text(member, "domain");
     let mut domain = None;
     let mut key = explicit.and_then(|domain| name_key(domain, suffix));
     if explicit.is_none()
         && opt_text(network, "id").is_some()
         && network["dnsEnabled"].as_bool() != Some(false)
-        && suffix.contains('.')
+        && suffix.len() <= 172
+        && suffix.to_ascii_lowercase().ends_with(".internal")
         && suffix.split('.').all(dns_label)
         && dns_label(text(member, "name"))
     {
@@ -169,6 +170,7 @@ fn project_member_name(status: &Value, member: &mut Value) {
             let name = text(entry, "name");
             (text(entry, "source") == "member"
                 && entry["answerable"].as_bool() == Some(true)
+                && name.len() + 1 + suffix.len() <= 253
                 && name.split('.').all(dns_label)
                 && name.split('.').count() <= 2
                 && host.eq_ignore_ascii_case(name.split('.').next().unwrap_or_default())
@@ -368,7 +370,7 @@ fn passes(member: &Value, filter: &str) -> bool {
 }
 
 /// The pills a row carries besides its role: `duplicate` (N34 rows sharing a host name in one region, or
-/// a name another network answers too: `duplicateNetworks`),
+/// duplicate DNS records in one network, or a name another network answers too: `duplicateNetworks`),
 /// `unmanaged` (an infrastructure member whose address is not fixed), `external_bridge` (it imports
 /// addresses of an external network), `fallback` (its custom path fell back), `first_hop_only`.
 fn marks(member: &Value) -> Vec<&'static str> {
@@ -793,7 +795,8 @@ fn region_summaries(status: &Value, members: &[Value]) -> Vec<(String, Value)> {
 /// - `devices`: the subnet devices named on this device.
 ///
 /// Answer: `{ groupBy, groups: [{ key, count, matched, open, worst, link, summary, rows }], total,
-/// matched }`. `key` is a region code, a role, or `null` for the single group of `none`. `link` is the
+/// matched }`, with optional `ownDomain` when the own record supplies a domain missing from the snapshot's `self`.
+/// `key` is a region code, a role, or `null` for the single group of `none`. `link` is the
 /// cross-region link from the local region, for the folded summary. `summary` (region groups of other
 /// regions only, else `null`) is `region_summary`: other regions are listed from their link and summary
 /// ranges even when the snapshot names no member in them, and their rows are only the members the
