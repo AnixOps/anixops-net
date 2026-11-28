@@ -2831,7 +2831,8 @@ fn test_node_delay_blocking(
 /// Delay through a node of the profile or of another subscription.
 fn listed_node_delay(desktop: &DesktopState, node_id: &str, url: &str) -> Result<Duration, String> {
     let (profile, _) = listed_node_profile(desktop, node_id)?;
-    measure_delay(profile.as_bytes(), url, EMBEDDED_DELAY_TIMEOUT).map_err(|error| error.to_string())
+    measure_delay(profile.as_bytes(), url, EMBEDDED_DELAY_TIMEOUT)
+        .map_err(|error| error.to_string())
 }
 
 fn listed_node_profile(desktop: &DesktopState, node_id: &str) -> Result<(String, String), String> {
