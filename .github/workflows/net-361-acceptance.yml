@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [windows-tauri, windows-winui]
+        platform: ${{ fromJSON(contains(github.event.head_commit.message, '[winui-only]') && '["windows-winui"]' || '["windows-tauri","windows-winui"]') }}
     env:
       ACCEPTANCE_PLATFORM: ${{ matrix.platform }}
     steps:
@@ -140,11 +140,13 @@ jobs:
           dotnet tool install --global wix --version 5.0.2
           wix extension add -g WixToolset.Util.wixext/5.0.2
           New-Item -ItemType Directory -Path acceptance-output | Out-Null
+          $msi = Join-Path $env:RUNNER_TEMP 'net-361-windows-winui-x64.msi'
           wix build installer/windows-native/Package.wxs -arch x64 -ext WixToolset.Util.wixext `
             -d "ProductVersion=1.0.4" -d "AppDir=$app" `
             -d "ServiceExe=$(Join-Path $release 'anixops-net-service.exe')" `
             -d "McpExe=$(Join-Path $release 'anixops-mcp.exe')" -d "WintunDir=$wintun" `
-            -o acceptance-output/net-361-windows-winui-x64.msi
+            -o $msi
+          Copy-Item -LiteralPath $msi -Destination acceptance-output/
 
       - name: Record provenance and SHA-256
         shell: pwsh
@@ -178,6 +180,7 @@ jobs:
           if-no-files-found: error
 
   linux:
+    if: ${{ !contains(github.event.head_commit.message, '[winui-only]') }}
     name: Package ${{ matrix.platform }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
