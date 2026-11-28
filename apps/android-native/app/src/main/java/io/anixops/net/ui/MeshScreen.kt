@@ -364,7 +364,10 @@ private fun statusLine(page: MeshPage): String {
 
 @Composable
 private fun Notices(notices: List<MeshNotice>) {
-    notices.forEach { notice -> NoticeCard(noticeText(notice), noticeDetail(notice), dismiss = null) }
+    notices.forEach { notice ->
+        val showDetail = notice.key == "failure:join_failed" || notice.key.startsWith("failure:peer_not_native:")
+        NoticeCard(noticeText(notice), if (showDetail) noticeDetail(notice) else null, dismiss = null)
+    }
 }
 
 @Composable

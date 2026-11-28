@@ -1,10 +1,10 @@
-import { Check, Layers, ListChecks, RefreshCw, TriangleAlert } from "lucide-react";
+import { Check, GitBranch, Layers, ListChecks, RefreshCw, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { desktop, NativeGroupSummary, RuleSetStatus, RuntimeSnapshot } from "../bridge";
 import { skippedLines } from "../rule-sets";
 import { availableRoutingModes, groupMemberLabel } from "../labels";
 import { liveEngine, usePolling } from "../live";
-import { Card, Row, Run } from "../ui";
+import { Card, EmptyState, Row, Run } from "../ui";
 import { Select } from "../controls";
 import { t } from "../i18n";
 import { routingWarningText } from "../error-text";
@@ -15,6 +15,17 @@ import { DataLists, DeviceNames, RuleHits, RuleTester } from "./RuleTools";
 export function RulesPage({ snapshot, busy, run }: { snapshot: RuntimeSnapshot | null; busy: string | null; run: Run }) {
   const [sets, reloadSets] = usePolling(desktop.ruleSets, liveEngine(snapshot));
   const missing = sets && Array.isArray(sets.missing) ? sets.missing : [];
+  if (!snapshot?.subscription && !snapshot?.selectedNode) {
+    return (
+      <Card>
+        <EmptyState
+          icon={GitBranch}
+          title={t("规则与分流")}
+          message={t("导入订阅或节点后，可在此选择规则、全局或直连模式。规则模式按自定义规则分流；带规则和策略组的订阅按订阅规则分流。")}
+        />
+      </Card>
+    );
+  }
   return (
     <div className="page-stack">
       <Card

@@ -97,30 +97,41 @@ fun RulesScreen(
 ) {
     val enabled = snapshot != null && !appBusy && !state.busy
     Page(stringResource(R.string.nav_rules), modifier, onBack) {
-        RoutingSection(snapshot?.routingMode, enabled, actions)
-        state.myRules?.let { MyRulesSection(it, enabled, actions.saveMyRules) }
-        GroupsSection(state.groups, enabled, actions.selectGroupOutbound)
-        // The engine answers rule hits only while it runs; the test needs it too.
-        state.hits?.let {
-            RuleTestSection(state.routeTest, enabled, actions.testRoute)
-            RuleHitsSection(it, enabled, actions.clearRuleHits)
-        }
-        DataListsSection(state.missingData, state.dataSources, enabled, actions.saveDataSource, actions.removeDataSource)
-        // 规则 is a page of its own: its lists (rule sets, groups, hits) are the page's content, not items the user
-        // adds to another page, so they are listed in full (N26 allows a dedicated full-page list).
-        if (state.ruleSets.isNotEmpty()) RuleSetsSection(state.ruleSets, enabled, actions.updateRuleSets)
-        if (state.routingWarnings.isNotEmpty()) RoutingWarningsSection(state.routingWarnings)
-        DnsSection(snapshot, state.dns, enabled, actions)
-        val dns = state.dns
-        if (snapshot?.dnsPreset == "custom" && dns != null) CustomDnsSection(dns, enabled, actions.saveDns)
-        Section(title = null) {
-            SwitchRow(
-                stringResource(R.string.block_quic),
-                stringResource(R.string.block_quic_hint),
-                checked = snapshot?.blockQuic == true,
-                enabled = enabled,
-                onChange = actions.setBlockQuic,
-            )
+        if (snapshot?.subscription == null && snapshot?.selectedNode == null && state.groups.isEmpty()) {
+            Section(stringResource(R.string.rules_empty_title)) {
+                Text(
+                    stringResource(R.string.rules_empty_message),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = LocalBrandPalette.current.text2,
+                    modifier = Modifier.padding(BrandSpacing.md),
+                )
+            }
+        } else {
+            RoutingSection(snapshot?.routingMode, enabled, actions)
+            state.myRules?.let { MyRulesSection(it, enabled, actions.saveMyRules) }
+            GroupsSection(state.groups, enabled, actions.selectGroupOutbound)
+            // The engine answers rule hits only while it runs; the test needs it too.
+            state.hits?.let {
+                RuleTestSection(state.routeTest, enabled, actions.testRoute)
+                RuleHitsSection(it, enabled, actions.clearRuleHits)
+            }
+            DataListsSection(state.missingData, state.dataSources, enabled, actions.saveDataSource, actions.removeDataSource)
+            // 规则 is a page of its own: its lists (rule sets, groups, hits) are the page's content, not items the user
+            // adds to another page, so they are listed in full (N26 allows a dedicated full-page list).
+            if (state.ruleSets.isNotEmpty()) RuleSetsSection(state.ruleSets, enabled, actions.updateRuleSets)
+            if (state.routingWarnings.isNotEmpty()) RoutingWarningsSection(state.routingWarnings)
+            DnsSection(snapshot, state.dns, enabled, actions)
+            val dns = state.dns
+            if (snapshot?.dnsPreset == "custom" && dns != null) CustomDnsSection(dns, enabled, actions.saveDns)
+            Section(title = null) {
+                SwitchRow(
+                    stringResource(R.string.block_quic),
+                    stringResource(R.string.block_quic_hint),
+                    checked = snapshot?.blockQuic == true,
+                    enabled = enabled,
+                    onChange = actions.setBlockQuic,
+                )
+            }
         }
     }
 }

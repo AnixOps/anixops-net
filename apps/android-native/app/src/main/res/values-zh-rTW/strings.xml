@@ -998,4 +998,6 @@
     <plurals name="mesh_notice_partial">
         <item quantity="other">%1$d 台成員無法連線：%2$s。</item>
     </plurals>
+    <string name="rules_empty_title">規則與分流</string>
+    <string name="rules_empty_message">匯入訂閱或節點後，可在此選擇規則、全域或直連模式。規則模式依自訂規則分流；附帶規則與原則群組的訂閱依訂閱規則分流。</string>
 </resources>

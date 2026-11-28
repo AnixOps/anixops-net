@@ -81,8 +81,8 @@ fun ModeChoiceScreen(onChoose: (AppMode) -> Unit, modifier: Modifier = Modifier)
             ) {
                 Text(stringResource(R.string.mode_choice_title), style = MaterialTheme.typography.headlineSmall)
                 Text(stringResource(R.string.mode_choice_summary), style = MaterialTheme.typography.bodyMedium, color = palette.text2)
-                ModeOption(AppMode.Debug, Icons.Filled.Search, R.string.mode_debug, R.string.mode_debug_hint, onChoose)
                 ModeOption(AppMode.Proxy, Icons.Filled.Home, R.string.mode_proxy, R.string.mode_proxy_hint, onChoose)
+                ModeOption(AppMode.Debug, Icons.Filled.Search, R.string.mode_debug, R.string.mode_debug_hint, onChoose)
             }
         }
     }
