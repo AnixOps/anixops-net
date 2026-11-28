@@ -52,6 +52,10 @@ async function run() {
     if (await agree.count()) await agree.first().click();
     await page.locator(".nav-item", { hasText: "组网" }).first().click();
     const detail = page.getByRole("complementary", { name: "成员详情" });
+    await detail.waitFor();
+    for (const label of expectations.absent ?? []) {
+      assert.equal(await page.getByRole("button", { name: label, exact: true }).count(), 0, `${label}: name without a peer`);
+    }
     if (expectations.noPeers) {
       const rows = projection["view.mesh_members"].groups.flatMap((group) => group.rows);
       assert.equal(rows.filter((row) => !row.self).length, 0, "a name record must not create a member row");

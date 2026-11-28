@@ -9,14 +9,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = json!({ "status": status, "groupBy": "region", "filter": "all", "sort": "name" });
     let mut result = Map::new();
     for command in [
-        "mesh_entry",
-        "mesh_members",
-        "mesh_subnets",
-        "mesh_paths",
-        "mesh_notices",
+        "view.mesh_entry",
+        "view.mesh_members",
+        "view.mesh_subnets",
+        "view.mesh_paths",
+        "view.mesh_notices",
     ] {
-        let view = client_view::invoke(command, &args).expect("mesh view command")?;
-        result.insert(format!("view.{command}"), view);
+        let view =
+            client_view::invoke(command, &args).ok_or_else(|| format!("missing {command}"))??;
+        result.insert(command.into(), view);
     }
     result.insert("status".into(), status);
     serde_json::to_writer(io::stdout().lock(), &result)?;

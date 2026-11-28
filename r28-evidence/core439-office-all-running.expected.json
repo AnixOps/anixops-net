@@ -1,0 +1,1 @@
+{"members":[{"name":"printer","address":"10.144.0.9","domain":"printer.lon.mesh.internal","otherNetworks":["lab","paris"]}],"absent":["backup","cam"],"own":{"address":"10.144.0.2"}}

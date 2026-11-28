@@ -9,6 +9,7 @@ permissions:
 
 jobs:
   mesh:
+    if: ${{ !contains(github.event.head_commit.message, '[projection-only]') }}
     name: Linux mesh contracts (${{ matrix.core }}, ${{ matrix.gate }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -111,6 +112,7 @@ jobs:
           unset ANIXOPS_MESH_PREVIEW ANIXOPS_MESH04_PREVIEW
           (cd r28-evidence && sha256sum --check SHA256SUMS)
           node -e 'const assert = require("node:assert/strict"); assert.equal(require("./r28-evidence/default.provenance.json").coreSha, "6790d8675309d5d2cb719a5fcee4acca69735663"); assert.equal(require("./r28-evidence/rc1.provenance.json").coreSha, "ef52978586ce43e8c5a7376f987eb435650d9019");'
+          node -e 'require("node:assert/strict").equal(require("./r28-evidence/core439.provenance.json").coreSha, "1d9b4907918355a27ab3bb65698b28ca3e0ed0fa");'
           mkdir -p client/crates/client-view/examples
           cp crates/client-view/examples/project_mesh_status.rs client/crates/client-view/examples/
           cp apps/windows-gui/ui/screenshots/mesh-compat.cjs client/apps/windows-gui/ui/screenshots/

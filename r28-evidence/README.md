@@ -6,6 +6,7 @@ The Net workflow sends the snapshots unchanged to `client_view::invoke`. Chromiu
 
 - `default-joined` and `rc1-joined` verify address-only member and local-device copy. Neither Core snapshot supplies a member domain or `duplicateOf`.
 - `rc1-office-*` and `rc1-paris-*` contain real `names[]` with no matching peer cards. They verify that records do not create member rows or attach a domain to the local device. The `cam.lon` panel record is not fully answerable. It retains `duplicate: true` when `duplicateNetworks` disappears.
+- `core439-office-*` comes from `r28-snapshots-core-pr-439` in the same Core run. This candidate has a `printer` member row with the matching member-source record. The browser verifies its full name and the presence or absence of reported network collisions. The panel-only `backup` and `cam` records never become member rows. The candidate's Linux Rust and mesh end-to-end checks passed before this evidence was run.
 - `synthetic-members` supplies matching member rows to test full domain copy, a standalone duplicate bit, record collisions across regions within one network, and cross-network warnings. It is a client regression input and does not stand in for a Core output.
 
 The projection does not identify a device from a panel alias or a bare address alone. Across-region warnings describe records and do not establish DNS short-name precedence, OS resolver behavior, or a live tunnel path.
