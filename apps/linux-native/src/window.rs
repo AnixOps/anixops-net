@@ -589,8 +589,7 @@ impl Shell {
 /// desktop's proxy settings); each change of the link comes back to the window as [`Show::Core`].
 fn link(socket: Option<String>, sender: &ComponentSender<Shell>) -> CoreLink {
     let desktop = Desktop::from_env();
-    let executable =
-        std::env::current_exe().unwrap_or_else(|_| PathBuf::from("anixops-net-preview"));
+    let executable = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("anixops-net"));
     // No login entry while this is the preview: the window that starts after login is still the old one.
     let session = LocalSession::new(desktop, None, executable);
     // What the daemon tells the window without being asked (notifications) is shown once the pages are.
@@ -733,10 +732,7 @@ impl SimpleComponent for Shell {
         scroller.set_child(Some(&pages));
 
         let sidebar_bar = adw::HeaderBar::new();
-        sidebar_bar.set_title_widget(Some(&adw::WindowTitle::new(
-            model.text("app.name"),
-            model.text("app.preview"),
-        )));
+        sidebar_bar.set_title_widget(Some(&adw::WindowTitle::new(model.text("app.name"), "")));
         let sidebar_view = adw::ToolbarView::new();
         sidebar_view.add_top_bar(&sidebar_bar);
         sidebar_view.set_content(Some(&scroller));
@@ -1246,7 +1242,7 @@ fn shoot(window: adw::ApplicationWindow, file: PathBuf, deadline: Instant) {
     }
     if let Err(problem) = draw(&window, &file) {
         eprintln!(
-            "anixops-net-preview: no screenshot at {}: {problem}",
+            "anixops-net: no screenshot at {}: {problem}",
             file.display()
         );
         FAILED.store(true, Ordering::SeqCst);

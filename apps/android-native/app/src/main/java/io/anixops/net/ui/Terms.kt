@@ -2,7 +2,7 @@ package io.anixops.net.ui
 
 /**
  * The user agreement (TERMS.md at the repository root, packed into the app's assets by the build) as the other
- * clients read it (apps/windows-gui/ui/src/terms.tsx): its version, and its text as headings, paragraphs and list
+ * clients read it: its version, and its text as headings, paragraphs and list
  * items. Someone accepts it once; a new major version asks again.
  */
 object Terms {

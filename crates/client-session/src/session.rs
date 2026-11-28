@@ -3,7 +3,7 @@
 //! decryption root.
 //!
 //! These belong to the user, not to the machine. A client whose engine runs in the window's own process (the
-//! Tauri desktop app, the portable build) does them itself, through [`LocalSession`]. Where the engine runs
+//! embedded client) does them itself, through [`LocalSession`]. Where the engine runs
 //! in a background service, that service cannot reach one user's settings, so the window process answers
 //! this trait for it (`docs/architecture/desktop-native.md`).
 

@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "The native Linux window of AnixOps Net (preview): GTK 4 and libadwaita over the core daemon."
+description = "The native Linux window of AnixOps Net: GTK 4 and libadwaita over the core daemon."
 
 # The window needs the GTK 4 and libadwaita development files, which plain workspace builds do not install, so
 # it sits behind the `gui` feature. Without it the crate is only what the window shows and how it is started
@@ -31,6 +31,6 @@ relm4 = { version = "0.11", default-features = false, features = ["libadwaita"],
 path = "src/lib.rs"
 
 [[bin]]
-name = "anixops-net-preview"
+name = "anixops-net"
 path = "src/main.rs"
 required-features = ["gui"]

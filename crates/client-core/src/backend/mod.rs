@@ -1,4 +1,4 @@
-//! Everything behind the window, free of Tauri so the workspace can test it: saved state, the embedded engine,
+//! Shared client backend: saved state, the embedded engine,
 //! the desktop's proxy settings and the autostart entry. The window layer (`app.rs`) only moves values in and
 //! out and does network fetches and delay tests outside the lock.
 

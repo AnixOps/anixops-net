@@ -31,7 +31,6 @@ public sealed partial class MainWindow : Window
 
         Title = strings["app.name"];
         AppName.Text = strings["app.name"];
-        AppStage.Text = strings["app.preview"];
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
         // An unpackaged window does not take the program's icon on its own (title bar, Alt+Tab).

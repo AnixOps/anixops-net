@@ -12,6 +12,9 @@ on:
   pull_request:
     paths:
       - .github/workflows/release.yml
+      - .github/actions/third-party-notices/**
+      - .github/scripts/third_party_notices.py
+      - Cargo.lock
       - installer/linux/**
       - installer/windows-native/**
   workflow_dispatch:
@@ -463,11 +466,11 @@ jobs:
           # Tarball: run in place from a versioned directory.
           staging="${dist_dir}/staging/${stem}"
           mkdir -p "${staging}/bin" "${staging}/share/applications" "${staging}/share/icons/hicolor/256x256/apps"
-          install -m 0755 "${release_bin}/anixops-net-preview" "${staging}/bin/anixops-net"
+          install -m 0755 "${release_bin}/anixops-net" "${staging}/bin/anixops-net"
           install -m 0755 "${release_bin}/anixops-netd" "${release_bin}/anixops-mcp" "${staging}/bin/"
           install -Dm0644 "${unit}" "${staging}/lib/systemd/system/anixops-netd.service"
           install -m 0644 apps/linux-native/data/anixops-net.png "${staging}/share/icons/hicolor/256x256/apps/anixops-net.png"
-          desktop_entry anixops-net > "${staging}/share/applications/anixops-net.desktop"
+          desktop_entry anixops-net > "${staging}/share/applications/io.anixops.net.desktop"
           install -m 0644 LICENSE "${staging}/LICENSE"
           install -m 0644 "${NOTICES}" "${staging}/THIRD_PARTY_NOTICES.txt"
           install -m 0644 installer/linux/INSTALL.md "${staging}/INSTALL.md"
@@ -480,11 +483,11 @@ jobs:
           deb_root="${dist_dir}/deb"
           mkdir -p "${deb_root}/DEBIAN" "${deb_root}/usr/bin" "${deb_root}/usr/share/applications" \
             "${deb_root}/usr/share/icons/hicolor/256x256/apps" "${deb_root}/usr/share/doc/anixops-net"
-          install -m 0755 "${release_bin}/anixops-net-preview" "${deb_root}/usr/bin/anixops-net"
+          install -m 0755 "${release_bin}/anixops-net" "${deb_root}/usr/bin/anixops-net"
           install -m 0755 "${release_bin}/anixops-netd" "${release_bin}/anixops-mcp" "${deb_root}/usr/bin/"
           install -Dm0644 "${unit}" "${deb_root}/usr/lib/systemd/system/anixops-netd.service"
           install -m 0644 apps/linux-native/data/anixops-net.png "${deb_root}/usr/share/icons/hicolor/256x256/apps/anixops-net.png"
-          desktop_entry /usr/bin/anixops-net > "${deb_root}/usr/share/applications/anixops-net.desktop"
+          desktop_entry /usr/bin/anixops-net > "${deb_root}/usr/share/applications/io.anixops.net.desktop"
           # Debian copyright file (DEP-5): the client's own license, and where the third-party notices are.
           install -m 0644 "${NOTICES}" "${deb_root}/usr/share/doc/anixops-net/THIRD_PARTY_NOTICES.txt"
           {

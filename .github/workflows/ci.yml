@@ -26,9 +26,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       rust: ${{ steps.changes.outputs.rust }}
-      ui: ${{ steps.changes.outputs.ui }}
       windows: ${{ steps.changes.outputs.windows }}
-      linux: ${{ steps.changes.outputs.linux }}
       apple: ${{ steps.changes.outputs.apple }}
       android_native: ${{ steps.changes.outputs.android_native }}
       windows_native: ${{ steps.changes.outputs.windows_native }}
@@ -39,9 +37,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      # AnixOps Design is vendored unmodified into apps/windows-gui/ui/src/design/anixops/ (with the app icons
-      # copied from it); apps/ios/Design/tokens.json maps it onto the client's names, and the Swift and CSS
-      # files are generated from both.
+      # All clients derive branding from the vendored design files.
       - name: AnixOps Design vendored copy matches its manifest
         run: python3 .github/scripts/sync_design.py --check
 
@@ -97,7 +93,7 @@ jobs:
         run: bash .github/scripts/ios-runtime-handshake.test.sh
 
       # One version: Cargo.toml's workspace version is the source, and every copy the other build systems read
-      # (Cargo.lock, tauri.conf.json, package.json, the .NET props and manifest, project.yml, build.gradle.kts)
+      # (Cargo.lock, .NET props and manifest, project.yml, build.gradle.kts)
       # equals it. release.yml and release-tag.yml also check it against the tag.
       - name: Version copies match the source
         run: |
@@ -153,9 +149,9 @@ jobs:
           PUSH_AFTER: ${{ github.event.after }}
         run: |
           set -euo pipefail
-          rust=false; ui=false; windows=false; linux=false; apple=false; android_native=false
+          rust=false; windows=false; apple=false; android_native=false
           windows_native=false; linux_native=false
-          all() { rust=true; ui=true; windows=true; linux=true; apple=true; android_native=true; windows_native=true; linux_native=true; }
+          all() { rust=true; windows=true; apple=true; android_native=true; windows_native=true; linux_native=true; }
           # Documentation no build, test or packaging step reads. TERMS.md and PRIVACY.md are not here: the apps
           # bundle them.
           docs_only() {
@@ -192,65 +188,12 @@ jobs:
           fi
           {
             echo "rust=${rust}"
-            echo "ui=${ui}"
             echo "windows=${windows}"
-            echo "linux=${linux}"
             echo "apple=${apple}"
             echo "android_native=${android_native}"
             echo "windows_native=${windows_native}"
             echo "linux_native=${linux_native}"
           } | tee -a "$GITHUB_OUTPUT"
-
-  ui:
-    name: Shared UI lint, test and build
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    needs: changes
-    if: ${{ needs.changes.outputs.ui == 'true' || needs.changes.outputs.windows == 'true' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-        with:
-          version: 9
-
-      - name: Setup Node
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: apps/windows-gui/ui/pnpm-lock.yaml
-
-      - name: Install dependencies
-        shell: bash
-        run: pnpm --dir apps/windows-gui/ui install --frozen-lockfile
-
-      - name: Audit production dependencies
-        # 打进安装包的前端依赖有 high 及以上公告就失败；开发依赖不进安装包。
-        shell: bash
-        run: pnpm --dir apps/windows-gui/ui audit --prod --audit-level high
-
-      - name: Lint
-        shell: bash
-        run: pnpm --dir apps/windows-gui/ui run lint
-
-      - name: Test
-        shell: bash
-        run: pnpm --dir apps/windows-gui/ui test
-
-      - name: Build
-        shell: bash
-        run: pnpm --dir apps/windows-gui/ui run build
-
-      - name: Upload the built interface
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: windows-gui-ui-${{ github.sha }}
-          path: apps/windows-gui/ui/dist
-          if-no-files-found: error
-          retention-days: 1
 
   rust-deps:
     name: Rust dependency advisories and licenses
@@ -278,7 +221,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: changes
-    if: ${{ needs.changes.outputs.rust == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.android_native == 'true' || needs.changes.outputs.apple == 'true' }}
+    if: ${{ needs.changes.outputs.rust == 'true' || needs.changes.outputs.android_native == 'true' || needs.changes.outputs.apple == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -356,107 +299,23 @@ jobs:
           ANIXOPS_OTHER_USER=anixops-other cargo test --locked -p desktop-mitm --lib -- \
             --ignored --exact capture::tests::another_account_cannot_read_opened_bodies
 
-  linux-gui:
-    name: Linux GUI build
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    env:
-      CARGO_INCREMENTAL: "0"
-    needs: changes
-    if: ${{ needs.changes.outputs.linux == 'true' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      # Tauri on Linux renders through WebKitGTK.
-      - name: Install WebKitGTK
-        shell: bash
-        run: |
-          bash .github/scripts/apt-install.sh libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-        with:
-          version: 9
-
-      - name: Setup Node
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: apps/windows-gui/ui/pnpm-lock.yaml
-
-      # The Linux window shares the Windows React interface.
-      - name: Build the shared interface
-        shell: bash
-        run: |
-          pnpm --dir apps/windows-gui/ui install --frozen-lockfile
-          pnpm --dir apps/windows-gui/ui run build
-
-      - name: Setup Rust
-        run: |
-          rustup toolchain install stable --profile minimal --component clippy
-          rustup default stable
-
-      - name: Restore Rust build cache
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          key: linux-gui
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-
-      - name: Lint, test and build the Linux GUI
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo clippy --locked -p networkcore-linux-gui --features gui --all-targets -- -D warnings
-          cargo test --locked -p networkcore-linux-gui -p client-core
-          cargo build --locked -p networkcore-linux-gui --features gui --release
-          test -x target/release/anixops-net
-
-      # F4 cold start (median of 7 launches to the window's first page load, budget 1.5 s), the loopback
-      # Prometheus endpoint and the install integrity check, on the release binary under Xvfb.
-      - name: Cold start and client health
-        shell: bash
-        env:
-          # Xvfb has no GPU: WebKitGTK renders in software.
-          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
-          LIBGL_ALWAYS_SOFTWARE: "1"
-        run: |
-          set -euo pipefail
-          bash .github/scripts/apt-install.sh xvfb xauth dbus
-          chmod +x .github/scripts/linux-client-health.sh
-          xvfb-run -a --server-args="-screen 0 1280x800x24" \
-            dbus-run-session -- .github/scripts/linux-client-health.sh target/release/anixops-net
-
   windows:
-    name: Windows build, test and MSI
+    name: Windows Rust workspace
     runs-on: windows-latest
     timeout-minutes: 60
     env:
       CARGO_INCREMENTAL: "0"
     needs:
       - changes
-      - ui
     if: >-
       ${{
         always() &&
         needs.changes.result == 'success' &&
-        needs.changes.outputs.windows == 'true' &&
-        needs.ui.result == 'success'
+        needs.changes.outputs.windows == 'true'
       }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Download the built interface
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: windows-gui-ui-${{ github.sha }}
-          path: apps/windows-gui/ui/dist
-
-      - name: Verify the built interface
-        shell: bash
-        run: test -s apps/windows-gui/ui/dist/index.html
 
       - name: Setup Windows C toolchain
         uses: msys2/setup-msys2@3c51bf698df1e37b2261f53cb67797b97761185c # v2.34.0
@@ -489,11 +348,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          # Pinned: Rust 1.100 lays build script outputs out as build/<crate>/<hash>/out, and tauri-build 2.6
-          # walks up from OUT_DIR to find the target directory, so the GUI build script fails with
-          # "The system cannot find the path specified". Move back to stable once tauri-build handles it.
-          rustup toolchain install 1.99.0 --profile minimal
-          rustup default 1.99.0
+          rustup toolchain install stable --profile minimal
+          rustup default stable
           rustup component add clippy
           rustup target add x86_64-pc-windows-gnu
 
@@ -502,21 +358,6 @@ jobs:
         with:
           shared-key: windows-gnu
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-
-      # A restored cache can hold webview2-com-sys outputs from an older Cargo.lock.
-      # Drop them so the WebView2Loader.dll uniqueness check below sees only this build.
-      - name: Clear stale WebView2 build outputs
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $releaseDir = "target\x86_64-pc-windows-gnu\debug"
-          foreach ($subDir in @("build", ".fingerprint")) {
-            $outputDir = Join-Path $releaseDir $subDir
-            if (Test-Path $outputDir) {
-              Get-ChildItem -Path $outputDir -Directory -Filter "webview2-com-sys-*" |
-                Remove-Item -Recurse -Force
-            }
-          }
 
       - name: Restore windres compatibility shim
         id: windres-shim-cache
@@ -542,407 +383,6 @@ jobs:
       - name: Test
         shell: bash
         run: cargo test --locked --workspace --all-targets
-
-      # Writes and removes real name resolution rules for the mesh's internal domain names on this runner, which runs
-      # as an administrator; ignored in the plain test run above, since it changes the device it runs on.
-      - name: Mesh name resolution rules on Windows
-        shell: bash
-        run: |
-          cargo test --locked -p networkcore-windows-gui --bin networkcore-windows-gui -- \
-            --ignored --exact gui::mesh_dns::tests::the_rules_are_written_and_removed_on_windows
-
-      # Two builds of the same source for the MSI upgrade test below: the older one with a lower file version,
-      # as release.yml stamps each release's MSI version into the executable (TAURI_CONFIG).
-      - name: Build the GUI
-        shell: bash
-        run: |
-          set -euo pipefail
-          TAURI_CONFIG='{"version":"0.3.0+1"}' cargo build --locked -p networkcore-windows-gui
-          mkdir -p dist/windows-ci/previous
-          cp target/x86_64-pc-windows-gnu/debug/networkcore-windows-gui.exe dist/windows-ci/previous/
-          TAURI_CONFIG='{"version":"0.3.0+2"}' cargo build --locked -p networkcore-windows-gui
-          # The anixops:// handler the MSI installs beside the GUI.
-          cargo build --locked -p anixops-net-link
-
-      # The MSI also ships the kernel's Windows CLI, built from the pinned kernel checkout with its own lockfile.
-      - name: Build the kernel Windows CLI
-        shell: bash
-        run: |
-          set -euo pipefail
-          kernel="$(bash .github/scripts/kernel-root.sh)"
-          echo "Kernel checkout: ${kernel}"
-          cargo build --locked --manifest-path "${kernel}/Cargo.toml" --target-dir target -p networkcore-windows
-          test -s target/x86_64-pc-windows-gnu/debug/networkcore-windows.exe
-
-      - name: Build and validate WiX MSI
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          dotnet tool install --global wix --version 4.0.6
-          wix extension add -g WixToolset.UI.wixext/4.0.6
-          New-Item -ItemType Directory -Force -Path dist\windows-ci | Out-Null
-          $releaseDir = (Resolve-Path "target\x86_64-pc-windows-gnu\debug").Path
-          $webView2LoaderCandidates = @(
-            Get-ChildItem -Path (Join-Path $releaseDir "build") -Recurse -Filter "WebView2Loader.dll" |
-              Where-Object {
-                $_.Directory.Name -eq "x64" -and
-                $_.Directory.Parent.Name -eq "out" -and
-                $_.Directory.Parent.Parent.Name -like "webview2-com-sys-*"
-              }
-          )
-          if ($webView2LoaderCandidates.Count -ne 1) {
-            $candidatePaths = $webView2LoaderCandidates.FullName -join ", "
-            throw "Expected exactly one x64 WebView2Loader.dll generated by webview2-com-sys; found $($webView2LoaderCandidates.Count): $candidatePaths"
-          }
-          $webView2LoaderPath = $webView2LoaderCandidates[0].FullName
-          if ((Get-Item $webView2LoaderPath).Length -le 0) {
-            throw "WebView2Loader.dll is empty: $webView2LoaderPath"
-          }
-          $defaultConfig = (Resolve-Path "installer\windows\default-managed-config.json").Path
-          $wintunPath = & .github/scripts/fetch-wintun.ps1 -Destination (Join-Path $env:RUNNER_TEMP "wintun")
-          $currentGui = "$releaseDir\networkcore-windows-gui.exe"
-          $previousGui = (Resolve-Path "dist\windows-ci\previous\networkcore-windows-gui.exe").Path
-          foreach ($gui in @($currentGui, $previousGui)) {
-            $info = (Get-Item $gui).VersionInfo
-            Write-Output "$gui file version $($info.FileMajorPart).$($info.FileMinorPart).$($info.FileBuildPart).$($info.FilePrivatePart)"
-          }
-          if ((Get-Item $currentGui).VersionInfo.FilePrivatePart -le (Get-Item $previousGui).VersionInfo.FilePrivatePart) {
-            throw "The GUI built for the upgrade test does not have a higher file version than the previous one."
-          }
-          # The GUI asks for administrator rights; the anixops:// handler must not, or every link would show an
-          # administrator prompt again (the manifest is embedded as plain XML text).
-          $linkExe = "$releaseDir\anixops-net-link.exe"
-          $guiText = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($currentGui))
-          $linkText = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($linkExe))
-          if (-not $guiText.Contains("requireAdministrator")) {
-            throw "The GUI no longer embeds its requireAdministrator manifest."
-          }
-          foreach ($level in @("requireAdministrator", "highestAvailable")) {
-            if ($linkText.Contains($level)) {
-              throw "anixops-net-link.exe asks for $level; it must run with the rights of whoever opens the link."
-            }
-          }
-
-          # The previous package has the uninstall conditions of the packages before 1.0 (no
-          # UPGRADINGPRODUCTCODE test), so the upgrade test also covers upgrading a beta: its actions then
-          # run the new program, which must leave the upgrade alone.
-          $currentWxs = Get-Content installer/windows/Package.wxs -Raw
-          $previousWxs = $currentWxs.Replace(" AND NOT UPGRADINGPRODUCTCODE", "")
-          if ($previousWxs -eq $currentWxs) {
-            throw "Package.wxs no longer has the UPGRADINGPRODUCTCODE conditions the upgrade test removes."
-          }
-          $previousWxsPath = Join-Path (Resolve-Path installer/windows).Path "Package-previous-ci.wxs"
-          Set-Content -Path $previousWxsPath -Value $previousWxs -Encoding utf8
-
-          $packages = @(
-            @{ Source = $previousWxsPath; Version = "0.2.1"; Gui = $previousGui; Name = "networkcore-windows-ci-previous" },
-            @{ Source = "installer/windows/Package.wxs"; Version = "0.2.2"; Gui = $currentGui; Name = "networkcore-windows-ci" }
-          )
-          # The third-party notices are generated by release.yml (and checked by the third-party-notices job); the
-          # CI packages carry a stand-in with the same name.
-          $noticesPath = Join-Path $env:RUNNER_TEMP "THIRD_PARTY_NOTICES.txt"
-          Set-Content -Path $noticesPath -Value "CI build: release.yml writes the third-party notices here." -Encoding utf8
-          $licensePath = (Resolve-Path LICENSE).Path
-          $wintunLicensePath = Join-Path (Split-Path $wintunPath) "wintun-LICENSE.txt"
-          foreach ($package in $packages) {
-            $integrityPath = Join-Path $env:RUNNER_TEMP "integrity-$($package.Name)\integrity.sha256"
-            & .github/scripts/write-integrity.ps1 -Output $integrityPath -Entry @(
-              "networkcore-windows-gui.exe=$($package.Gui)",
-              "anixops-net-link.exe=$linkExe",
-              "networkcore-windows.exe=$releaseDir\networkcore-windows.exe",
-              "WebView2Loader.dll=$webView2LoaderPath",
-              "wintun.dll=$wintunPath"
-            )
-            $msiPath = "dist\windows-ci\$($package.Name).msi"
-            wix build $package.Source `
-              -ext WixToolset.UI.wixext `
-              -arch x64 `
-              -d "ProductVersion=$($package.Version)" `
-              -d "CliExe=$releaseDir\networkcore-windows.exe" `
-              -d "GuiExe=$($package.Gui)" `
-              -d "LinkExe=$linkExe" `
-              -d "WebView2LoaderDll=$webView2LoaderPath" `
-              -d "WintunDll=$wintunPath" `
-              -d "DefaultConfig=$defaultConfig" `
-              -d "IntegrityList=$integrityPath" `
-              -d "LicenseFile=$licensePath" `
-              -d "NoticesFile=$noticesPath" `
-              -d "WintunLicense=$wintunLicensePath" `
-              -o $msiPath
-            if ($LASTEXITCODE -ne 0) { throw "WiX could not build $msiPath." }
-            wix msi validate $msiPath
-            if ($LASTEXITCODE -ne 0) { throw "$msiPath did not validate." }
-            if ((Get-Item $msiPath).Length -le 0) {
-              throw "Windows managed client MSI $msiPath is empty."
-            }
-            & .github/scripts/check-windows-icons.ps1 -Msi $msiPath -Exe @($package.Gui)
-          }
-          Remove-Item -Force $previousWxsPath
-
-      - name: Install, upgrade and uninstall Windows managed client MSI
-        # Usually under a minute; every msiexec call is bounded at 120 seconds. A hang (seen once on #276) then fails
-        # here, with the last phase marker below in the log, instead of holding the job until its own timeout.
-        timeout-minutes: 10
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $msiPath = (Resolve-Path "dist\windows-ci\networkcore-windows-ci.msi").Path
-          $previousMsiPath = (Resolve-Path "dist\windows-ci\networkcore-windows-ci-previous.msi").Path
-          $currentGuiSource = (Resolve-Path "target\x86_64-pc-windows-gnu\debug\networkcore-windows-gui.exe").Path
-          $previousInstallLog = Join-Path $env:RUNNER_TEMP "networkcore-msi-previous-install.log"
-          $upgradeLog = Join-Path $env:RUNNER_TEMP "networkcore-msi-upgrade.log"
-          $uninstallLog = Join-Path $env:RUNNER_TEMP "networkcore-msi-uninstall.log"
-
-          function Invoke-MsiTransaction {
-            param(
-              [string[]]$Arguments,
-              [string]$LogPath,
-              [string]$Operation
-            )
-
-            $process = Start-Process -FilePath "msiexec.exe" -ArgumentList $Arguments -PassThru
-            if (-not $process.WaitForExit(120000)) {
-              Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-              if (Test-Path $LogPath) {
-                Get-Content $LogPath -Tail 200
-              }
-              throw "Windows managed client MSI $Operation exceeded 120 seconds."
-            }
-            if ($process.ExitCode -notin @(0, 3010)) {
-              if (Test-Path $LogPath) {
-                Get-Content $LogPath -Tail 200
-              }
-              throw "Windows managed client MSI $Operation failed with exit code $($process.ExitCode)."
-            }
-          }
-
-          $installDir = Join-Path $env:ProgramFiles "AnixOps\NetworkCore"
-          $guiExe = Join-Path $installDir "networkcore-windows-gui.exe"
-          $dataDir = Join-Path $env:ProgramData "AnixOps\NetworkCore"
-          $managedConfigPath = Join-Path $dataDir "managed-config.json"
-          $guiLog = Join-Path $dataDir "logs\gui.log"
-          $decryptionKey = Join-Path $dataDir "mitm\root-ca-key.pem"
-
-          # The integrity list the client checks at start must match the installed files.
-          function Assert-InstalledIntegrity {
-            $integrityList = Join-Path $installDir "integrity.sha256"
-            if (-not (Test-Path $integrityList -PathType Leaf)) {
-              throw "Windows managed client MSI did not install integrity.sha256."
-            }
-            foreach ($line in Get-Content $integrityList) {
-              if (-not $line.Trim()) { continue }
-              $expected, $name = $line -split "  ", 2
-              $actual = (Get-FileHash -Algorithm SHA256 -Path (Join-Path $installDir $name)).Hash.ToLowerInvariant()
-              if ($actual -ne $expected) {
-                throw "Installed $name does not match integrity.sha256."
-              }
-            }
-          }
-
-          # Sign-in startup is a per-user elevated logon task (the GUI manifest requires
-          # administrator rights, which the Run key silently skips). Seeded the way the GUI
-          # registers it.
-          $startupSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-          $startupTaskName = "AnixOps Net $startupSid"
-          function Register-StartupTask {
-            $startupAction = New-ScheduledTaskAction -Execute $guiExe -Argument "--start-after-login"
-            $startupTrigger = New-ScheduledTaskTrigger -AtLogOn
-            Register-ScheduledTask -TaskPath "\AnixOps\" -TaskName $startupTaskName -Action $startupAction -Trigger $startupTrigger -Force | Out-Null
-          }
-          function Test-StartupTask {
-            $null -ne (Get-ScheduledTask -TaskPath "\AnixOps\" -TaskName $startupTaskName -ErrorAction SilentlyContinue)
-          }
-
-          Write-Output "== Phase: install the previous version and upgrade"
-          # --- Upgrade: the previous package (with the uninstall conditions of the betas), then this one.
-          Invoke-MsiTransaction `
-            -Arguments @("/i", "`"$previousMsiPath`"", "/qn", "/norestart", "/l*v", "`"$previousInstallLog`"") `
-            -LogPath $previousInstallLog `
-            -Operation "previous version install"
-
-          if (-not (Test-Path $managedConfigPath -PathType Leaf)) {
-            throw "Windows managed client MSI did not install managed-config.json."
-          }
-          # The data folder holds subscriptions and keys: only the system and administrators may open it.
-          $dataSddl = (Get-Acl -Path $dataDir).Sddl
-          Write-Output "Data folder access: $dataSddl"
-          if ($dataSddl -match ';;;(BU|AU|WD|IU)\)') {
-            throw "The data folder the MSI created is open to ordinary users: $dataSddl"
-          }
-
-          # What the user set up on the previous version: an imported profile in managed-config.json, a
-          # sign-in startup task, an HTTPS decryption root trusted in their own store (copied in through the
-          # registry, which adding through the certificate store would stop to confirm), its key, and a
-          # driver the settings page installed.
-          $userConfig = @'
-          {
-            "schema_version": 2,
-            "system_proxy": { "enabled": true, "server": "127.0.0.1:7890", "bypass": "<local>" },
-            "system_proxy_owner": "desktop",
-            "root_certificate_path": null,
-            "driver_package": null,
-            "native_mitm": null,
-            "embedded": {
-              "enabled": true,
-              "envelope_path": "C:\\ProgramData\\AnixOps\\NetworkCore\\embedded\\envelope.json",
-              "listen_host": "127.0.0.1",
-              "listen_port": 7890
-            }
-          }
-          '@
-          Set-Content -Path $managedConfigPath -Value $userConfig -NoNewline -Encoding utf8
-          $userConfigHash = (Get-FileHash -Algorithm SHA256 -Path $managedConfigPath).Hash
-          Register-StartupTask
-          $seedRoot = New-SelfSignedCertificate -Subject "CN=AnixOps Net CI decryption root" `
-            -CertStoreLocation "Cert:\CurrentUser\My" -KeyUsage CertSign -NotAfter (Get-Date).AddDays(1)
-          $rootThumbprint = $seedRoot.Thumbprint
-          # Adding to CurrentUser\Root through the certificate APIs asks the user to confirm, so the
-          # root is written straight into the registry-backed Root store. Its "Blob" value is a
-          # serialized certificate element: property id 0x20 (CERT_CERT_PROP_ID), reserved 1, the
-          # length, then the DER certificate.
-          $rootKey = "HKCU:\Software\Microsoft\SystemCertificates\Root\Certificates\$rootThumbprint"
-          $der = $seedRoot.RawData
-          # CryptoAPI ignores a user root written this way, and drops it from the registry the next time
-          # something opens the user's Root store (msiexec checking the package does), because only the
-          # confirmation dialog lists a root under ProtectedRoots. So the test checks the registry entry
-          # itself, which is what the user's trust is stored in and what the uninstall purge deletes, and
-          # writes it again before each step that must remove or keep it.
-          function Set-CiUserRoot {
-            $element = New-Object System.IO.MemoryStream
-            $writer = New-Object System.IO.BinaryWriter($element)
-            $writer.Write([UInt32]0x20)
-            $writer.Write([UInt32]1)
-            $writer.Write([UInt32]$der.Length)
-            $writer.Write($der)
-            $writer.Flush()
-            New-Item -Path $rootKey -Force | Out-Null
-            New-ItemProperty -Path $rootKey -Name Blob -PropertyType Binary -Value $element.ToArray() -Force | Out-Null
-            $writer.Dispose()
-            $blob = (Get-ItemProperty -Path $rootKey -Name Blob -ErrorAction SilentlyContinue).Blob
-            if ($null -eq $blob -or $blob.Length -ne (12 + $der.Length)) {
-              throw "The CI decryption root could not be put in the user's root store."
-            }
-          }
-          Set-CiUserRoot
-          Set-Content -Path (Join-Path $dataDir "trusted-roots.txt") -Value $rootThumbprint -Encoding ascii
-          New-Item -ItemType Directory -Force -Path (Join-Path $dataDir "mitm") | Out-Null
-          Set-Content -Path $decryptionKey -Value "ci placeholder key" -Encoding ascii
-          $missingDriver = Join-Path $env:RUNNER_TEMP "anixops-ci-missing-driver.inf"
-          @{ driver_inf_path = $missingDriver } | ConvertTo-Json | Set-Content -Path (Join-Path $dataDir "desktop-state.json") -Encoding utf8
-
-          if (-not (Test-Path $rootKey)) {
-            throw "The CI decryption root left the user's root store before the upgrade."
-          }
-          Invoke-MsiTransaction `
-            -Arguments @("/i", "`"$msiPath`"", "/qn", "/norestart", "/l*v", "`"$upgradeLog`"") `
-            -LogPath $upgradeLog `
-            -Operation "upgrade"
-
-          if (-not (Test-Path $managedConfigPath -PathType Leaf)) {
-            throw "The MSI upgrade removed managed-config.json."
-          }
-          if ((Get-FileHash -Algorithm SHA256 -Path $managedConfigPath).Hash -ne $userConfigHash) {
-            Get-Content $managedConfigPath
-            throw "The MSI upgrade changed the user's managed-config.json."
-          }
-          if (-not (Test-StartupTask)) {
-            if (Test-Path $guiLog) { Get-Content $guiLog -Tail 80 }
-            Select-String -Path $upgradeLog -Pattern "CleanupCurrentUserStartup|PurgeManagedNetworkState|RemoveExistingProducts|UPGRADINGPRODUCTCODE" |
-              Select-Object -First 60 | ForEach-Object { $_.Line }
-            throw "The MSI upgrade removed the sign-in startup task."
-          }
-          # The client takes a user's root out only in the purge, which logs "purged:". Windows itself
-          # may drop the test root during the upgrade (see Set-CiUserRoot), which is not a failure.
-          Write-Output "Test root still in the registry after the upgrade: $(Test-Path $rootKey)"
-          $upgradeGuiLog = if (Test-Path $guiLog) { Get-Content $guiLog -Raw } else { "" }
-          if ($upgradeGuiLog.Contains("purged:")) {
-            Write-Output $upgradeGuiLog
-            throw "The MSI upgrade removed the trusted HTTPS decryption root."
-          }
-          if (-not (Test-Path $decryptionKey -PathType Leaf)) {
-            throw "The MSI upgrade removed the HTTPS decryption key."
-          }
-          # The previous package's uninstall actions ran the new program, which left the upgrade alone.
-          $logText = if (Test-Path $guiLog) { Get-Content $guiLog -Raw } else { "" }
-          foreach ($action in @("--purge", "--cleanup-startup")) {
-            if (-not $logText.Contains("$action skipped: the package is being upgraded")) {
-              Write-Output $logText
-              throw "The previous package's $action action did not recognise the upgrade."
-            }
-          }
-          if ((Get-FileHash -Algorithm SHA256 -Path $guiExe).Hash -ne (Get-FileHash -Algorithm SHA256 -Path $currentGuiSource).Hash) {
-            throw "The MSI upgrade did not replace the GUI executable with the new version's."
-          }
-          Assert-InstalledIntegrity
-
-          Write-Output "== Phase: check the installed client"
-          # --- The installed client.
-          # The client has no Windows service any more.
-          if ($null -ne (Get-Service -Name "AnixOpsNetworkCore" -ErrorAction SilentlyContinue)) {
-            throw "Windows managed client MSI registered the removed AnixOpsNetworkCore service."
-          }
-          if (Test-Path (Join-Path $installDir "networkcore-windows-service.exe")) {
-            throw "Windows managed client MSI installed the removed service executable."
-          }
-          if (-not (Test-Path $guiExe -PathType Leaf)) {
-            throw "Windows managed client MSI did not install the GUI executable."
-          }
-          if (-not (Test-Path (Join-Path $installDir "WebView2Loader.dll") -PathType Leaf)) {
-            throw "Windows managed client MSI did not install WebView2Loader.dll beside the GUI executable."
-          }
-          if (-not (Test-Path (Join-Path $installDir "wintun.dll") -PathType Leaf)) {
-            throw "Windows managed client MSI did not install wintun.dll beside the GUI executable."
-          }
-          foreach ($notice in @("LICENSE.txt", "THIRD_PARTY_NOTICES.txt", "wintun-LICENSE.txt")) {
-            $noticeFile = Join-Path $installDir $notice
-            if (-not (Test-Path $noticeFile -PathType Leaf) -or (Get-Item $noticeFile).Length -le 0) {
-              throw "Windows managed client MSI did not install $notice."
-            }
-          }
-
-          # GitHub-hosted Windows runners have no dependable interactive desktop session for
-          # WebView2 navigation. Verify the installed binary through its non-windowed entrypoint;
-          # the real page-load assertion remains an explicit Windows beta acceptance step.
-          $guiProcess = Start-Process -FilePath $guiExe -ArgumentList "--cleanup-startup" -PassThru
-          if (-not $guiProcess.WaitForExit(15000)) {
-            Stop-Process -Id $guiProcess.Id -Force -ErrorAction SilentlyContinue
-            throw "Windows GUI cleanup entrypoint did not exit within 15 seconds."
-          }
-          if ($guiProcess.ExitCode -ne 0) {
-            throw "Windows GUI cleanup entrypoint exited with code $($guiProcess.ExitCode)."
-          }
-
-          Write-Output "== Phase: uninstall"
-          # --- Removal. The uninstaller, running as LocalSystem, must remove the sign-in task, the
-          # service an earlier version registered (portable copies did it by hand), the decryption
-          # root from the signed-in user's own store and its key, and try the recorded driver.
-          Register-StartupTask
-          Set-CiUserRoot
-          New-Service -Name "AnixOpsNetworkCore" -BinaryPathName "`"$guiExe`" --legacy-service-placeholder" -StartupType Manual | Out-Null
-
-          Invoke-MsiTransaction `
-            -Arguments @("/x", "`"$msiPath`"", "/qn", "/norestart", "/l*v", "`"$uninstallLog`"") `
-            -LogPath $uninstallLog `
-            -Operation "uninstall"
-
-          if ($null -ne (Get-Service -Name "AnixOpsNetworkCore" -ErrorAction SilentlyContinue)) {
-            throw "Windows managed client MSI uninstall left the legacy AnixOpsNetworkCore service registered."
-          }
-          if (Test-StartupTask) {
-            throw "Windows managed client MSI uninstall left the NetworkCore sign-in startup task."
-          }
-          if ((Test-Path $rootKey) -or (Test-Path "Cert:\CurrentUser\Root\$rootThumbprint") -or (Test-Path "Cert:\LocalMachine\Root\$rootThumbprint")) {
-            throw "Windows managed client MSI uninstall left the trusted HTTPS decryption root."
-          }
-          if (Test-Path $decryptionKey) {
-            throw "Windows managed client MSI uninstall left the HTTPS decryption key."
-          }
-          $logText = if (Test-Path $guiLog) { Get-Content $guiLog -Raw } else { "" }
-          if (-not ($logText -match "purged: machine_roots=\d+ drivers=1 user_roots=1")) {
-            Write-Output $logText
-            throw "The uninstall purge did not record the removed root and the recorded driver."
-          }
-          Remove-Item -Path "Cert:\CurrentUser\My\$rootThumbprint" -DeleteKey -ErrorAction SilentlyContinue
 
   swift:
     name: Swift package build, test and manifest validation
@@ -1541,7 +981,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # The same Rust toolchain as the "Windows build, test and MSI" job, for the service.
+      # The same Rust toolchain as the "Windows Rust workspace" job, for the service.
       - name: Setup Windows C toolchain
         uses: msys2/setup-msys2@3c51bf698df1e37b2261f53cb67797b97761185c # v2.34.0
         id: msys2
@@ -1573,9 +1013,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          # The same pinned toolchain as the Windows job.
-          rustup toolchain install 1.99.0 --profile minimal
-          rustup default 1.99.0
+          rustup toolchain install stable --profile minimal
+          rustup default stable
           rustup target add x86_64-pc-windows-gnu
 
       - name: Restore Rust build cache
@@ -1630,26 +1069,6 @@ jobs:
       - name: Build
         run: dotnet build apps/windows-native/AnixOps.Net.slnx --configuration Release
 
-      # The released web client (the Tauri one), to compare start time and idle memory against on this
-      # same machine.
-      - name: Fetch the released web client
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $ErrorActionPreference = "Stop"
-          $tag = gh release list --repo $env:GITHUB_REPOSITORY --limit 1 --json tagName --jq ".[0].tagName"
-          if (-not $tag) { throw "no release to compare against" }
-          $dir = Join-Path $env:RUNNER_TEMP "web-client"
-          gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern "anixops-net-*-windows-x64-portable.zip" --dir $dir
-          if ($LASTEXITCODE -ne 0) { throw "could not download the portable web client of $tag" }
-          $zip = Get-ChildItem $dir -Filter "*.zip" | Select-Object -First 1
-          Expand-Archive -Path $zip.FullName -DestinationPath (Join-Path $dir "files")
-          $exe = Get-ChildItem (Join-Path $dir "files") -Recurse -Filter "networkcore-windows-gui.exe" | Select-Object -First 1
-          if (-not $exe) { throw "$($zip.Name) has no networkcore-windows-gui.exe" }
-          Write-Host "comparing against $tag ($($zip.Name))"
-          "ANIXOPS_NET_WEB_CLIENT_EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
       # The UI tests start the built app on the runner's desktop and drive it through UI Automation; they
       # save a picture of every page in both languages and both themes.
       - name: Test
@@ -1664,14 +1083,6 @@ jobs:
         run: |
           $file = Join-Path $env:RUNNER_TEMP "windows-native-screenshots\requests-measurement.json"
           if (Test-Path $file) { Get-Content $file } else { Write-Host "no measurement was written" }
-
-      # Start time and idle memory of the native app and the released web client, as measured above.
-      - name: Show the startup comparison
-        if: ${{ always() }}
-        shell: pwsh
-        run: |
-          $file = Join-Path $env:RUNNER_TEMP "windows-native-screenshots\startup-measurement.json"
-          if (Test-Path $file) { Get-Content $file } else { Write-Host "no comparison was written" }
 
       # Pass mark 3, TUN part: the service (the window has no rights for it) makes the Wintun adapter, the
       # machine's traffic leaves through it and arrives, and disconnecting leaves no adapter. A step of
@@ -1802,7 +1213,7 @@ jobs:
           cargo clippy --locked -p anixops-net-native --features gui --all-targets -- -D warnings
           cargo test --locked -p anixops-net-native --features gui
           cargo build --locked -p anixops-net-native --features gui --release
-          test -x target/release/anixops-net-preview
+          test -x target/release/anixops-net
 
       # The window links no engine: it talks to the daemon. Keeps that from slipping back in.
       - name: The window has no engine in it
@@ -1830,7 +1241,7 @@ jobs:
         run: |
           set -euo pipefail
           xvfb-run -a --server-args="-screen 0 2400x1600x24" dbus-run-session -- \
-            .github/scripts/linux-native-screenshots.sh target/release/anixops-net-preview \
+            .github/scripts/linux-native-screenshots.sh target/release/anixops-net \
             "${RUNNER_TEMP}/linux-native-screenshots"
 
       # The last part runs the window against the real daemon: not running, found, connected and disconnected
@@ -1849,7 +1260,7 @@ jobs:
             sudo install -d -m 0700 -o "${uid}" "/run/user/${uid}"
           fi
           xvfb-run -a --server-args="-screen 0 1280x800x24" dbus-run-session -- \
-            python3 .github/scripts/linux-native-a11y.py target/release/anixops-net-preview \
+            python3 .github/scripts/linux-native-a11y.py target/release/anixops-net \
             crates/client-strings/catalogue.json target/release/anixops-netd \
             "${RUNNER_TEMP}/linux-native-screenshots"
 
@@ -1956,11 +1367,9 @@ jobs:
     if: ${{ always() }}
     needs:
       - changes
-      - ui
       - rust-deps
       - third-party-notices
       - rust-linux
-      - linux-gui
       - android-native
       - android-native-smoke
       - windows

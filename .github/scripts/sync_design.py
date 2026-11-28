@@ -8,9 +8,7 @@
 tree state does not matter. --check hashes the vendored files and compares them with manifest.json, which the
 sync wrote. Never edit a vendored file by hand: change the design repository and sync again.
 
-The vendored directory is apps/windows-gui/ui/src/design/anixops/. The desktop UI imports tokens.css and Inter
-from there, .github/scripts/design_tokens.py reads tokens.json from there to generate the Apple palette, and the
-app icons are copied from brand/ (see `--icons`).
+The vendored directory is third_party/anixops-design/. It supplies native colours and app icons.
 
 Standard library only.
 """
@@ -26,7 +24,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-DESIGN_DIR = ROOT / "apps/windows-gui/ui/src/design/anixops"
+DESIGN_DIR = ROOT / "third_party/anixops-design"
 REPOSITORY = "AnixOps/anixops-design"
 
 # Vendored path (relative to DESIGN_DIR) -> path in the design repository.
@@ -34,23 +32,7 @@ FILES = {
     "LICENSE": "LICENSE",
     "LICENSE-BRAND.md": "LICENSE-BRAND.md",
     "tokens.json": "tokens/tokens.json",
-    "tokens.css": "tokens/css/tokens.css",
-    "fonts/inter/InterVariable-latin.woff2": "fonts/inter/InterVariable-latin.woff2",
-    "fonts/inter/inter.css": "fonts/inter/inter.css",
-    "fonts/inter/OFL.txt": "fonts/inter/OFL.txt",
-    "brand/mark.svg": "brand/assets/mark.svg",
-    "brand/mark-glyph.svg": "brand/assets/mark-glyph.svg",
-    "brand/favicon.svg": "brand/assets/favicon.svg",
-    "brand/app-icon.svg": "brand/assets/app-icon.svg",
-    "brand/app-icon-1024.png": "brand/assets/app-icon/app-icon-1024.png",
-    "brand/tauri/32x32.png": "brand/assets/tauri/32x32.png",
-    "brand/tauri/128x128.png": "brand/assets/tauri/128x128.png",
-    "brand/tauri/128x128@2x.png": "brand/assets/tauri/128x128@2x.png",
-    "brand/tauri/icon.png": "brand/assets/tauri/icon.png",
-    "brand/tauri/icon.ico": "brand/assets/tauri/icon.ico",
-    "brand/tauri/icon.icns": "brand/assets/tauri/icon.icns",
     # The AnixOps Net product icon (brand.md 2.6): the app icon on every platform.
-    "brand/products/net/icon.svg": "brand/assets/products/net/icon.svg",
     "brand/products/net/icon-256.png": "brand/assets/products/net/icon-256.png",
     "brand/products/net/icon-512.png": "brand/assets/products/net/icon-512.png",
     "brand/products/net/icon.ico": "brand/assets/products/net/icon.ico",
@@ -66,10 +48,7 @@ GENERATED = ("VERSION", "NOTICE.md", "manifest.json")
 ICONS = {
     "apps/ios/Sources/NetworkCoreApp/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png": "brand/products/net/app-icon-1024.png",
     "apps/ios/Design/AppIcon.svg": "brand/products/net/app-icon.svg",
-    "apps/windows-gui/icons/networkcore.png": "brand/products/net/icon-256.png",
-    "apps/windows-gui/icons/icon.ico": "brand/products/net/icon.ico",
     "apps/windows-native/src/AnixOps.Net.App/Assets/AnixOpsNet.ico": "brand/products/net/icon.ico",
-    "apps/linux-gui/icons/networkcore.png": "brand/products/net/icon-256.png",
     "apps/linux-native/data/anixops-net.png": "brand/products/net/icon-256.png",
     "apps/android-native/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png": "brand/products/net/icon-256.png",
     # The in-app mark (BrandMark in SwiftUI): the AnixOps Net product icon.
@@ -86,12 +65,12 @@ def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def version_of(tokens_css: bytes) -> str:
-    head = tokens_css.split(b"\n", 1)[0].decode("utf-8")
-    marker = "AnixOps Design "
-    if marker not in head:
-        fail("tokens.css header names no AnixOps Design version")
-    return head.split(marker, 1)[1].rstrip(" .*/")
+def version_of(tokens: bytes) -> str:
+    description = json.loads(tokens).get("$description", "")
+    version = description.partition("AnixOps Design System tokens, v")[2].partition(". W3C")[0]
+    if not version:
+        fail("tokens.json description names no AnixOps Design version")
+    return version
 
 
 def notice(version: str, ref: str) -> str:
@@ -104,9 +83,8 @@ CI (`sync_design.py --check`) verifies them against `manifest.json`.
 
 Licences:
 
-- `tokens.json`, `tokens.css`: MIT, see `LICENSE`.
-- `fonts/inter/`: Inter, SIL Open Font License 1.1, see `fonts/inter/OFL.txt`.
-- `brand/` (the AnixOps mark, glyph, favicon and app icons) and the name
+- `tokens.json`: MIT, see `LICENSE`.
+- `brand/` (the AnixOps app icons) and the name
   "AnixOps": **not** MIT. All rights reserved; use is limited to official
   AnixOps products, see `LICENSE-BRAND.md` and `/TRADEMARKS.md`. Forks and
   redistributions that are not official AnixOps releases must replace these
@@ -136,7 +114,7 @@ def sync(source: Path, ref: str) -> None:
     commit = subprocess.run(["git", "-C", str(source), "rev-parse", f"{ref}^{{commit}}"], check=True,
                             capture_output=True, text=True).stdout.strip()
     pinned = ref if ref.startswith("v") else commit
-    version = version_of(files["tokens.css"])
+    version = version_of(files["tokens.json"])
     if DESIGN_DIR.exists():
         shutil.rmtree(DESIGN_DIR)
     for vendored, data in files.items():
@@ -198,8 +176,8 @@ def check() -> None:
         problems.append(f"unexpected file {extra}")
     if not problems:
         version = recorded["version"]
-        if version_of(files["tokens.css"]) != version:
-            problems.append("tokens.css version differs from manifest.json")
+        if version_of(files["tokens.json"]) != version:
+            problems.append("tokens.json version differs from manifest.json")
         if (DESIGN_DIR / "VERSION").read_text(encoding="utf-8") != version + "\n":
             problems.append("VERSION differs from manifest.json")
         if (DESIGN_DIR / "NOTICE.md").read_text(encoding="utf-8") != notice(version, recorded["ref"]):

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- English, the default: every language the app is not translated into reads English, as on the other clients.
      Simplified Chinese is values-zh and Traditional Chinese values-zh-rTW. Wording follows the shared interface
-     (apps/windows-gui/ui/src/labels.ts, i18n-*.ts) until the strings come from one catalog for every client
+     used by the clients
      (docs/architecture/android-native-compose.md §7). -->
 <resources>
     <!-- Not translated: names and units. -->

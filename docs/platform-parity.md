@@ -1,16 +1,7 @@
 # 全平台功能对照
 
-本页对照 iOS、macOS、Windows、Linux、Android 五个客户端的功能，列出缺口和补齐计划。各平台实现细节分别见
-[`debug-mode.md`](debug-mode.md)、[`phone-debugging.md`](phone-debugging.md) 和 `apps/*/README.md`。
-
-- 界面：iOS 和 macOS 共用 SwiftUI（`apps/ios`），Windows、Linux 共用 Tauri 界面（`apps/windows-gui/ui`），Android 是
-  原生 Kotlin + Jetpack Compose（`apps/android-native`，见 [`architecture/android-native-compose.md`](architecture/android-native-compose.md)）。
-  后端分别是 `apps/windows-gui`（Windows）和 `crates/client-core`（Linux 与 Android 共用，Android 经 JNI 调用）。
-- 内核能力都在 networkcore（固定 `rev`），客户端只决定用不用、怎么呈现。
-- Windows 和 Linux 正在改为原生界面（WinUI 3、GTK4 + libadwaita），方案和迁移清单见
-  [`architecture/desktop-native.md`](architecture/desktop-native.md)。切换之前 Tauri 桌面版仍是正式版，本表的 Windows、
-  Linux 两列指 Tauri 版；原生骨架合并时会加“Windows 原生”“Linux 原生”两列。
-- 新增或改动功能时请同步更新本表。一个功能只在部分平台上线时，PR 描述写明其余平台的计划或系统限制。
+本表保留切换前的功能核对记录，Windows 和 Linux 两列描述当时的 Tauri 版本。当前桌面发布使用 WinUI 3 和 GTK 4／libadwaita，
+原生实现和接入进度见 [桌面架构](architecture/desktop-native.md)。iOS 和 macOS 使用 SwiftUI，Android 使用 Jetpack Compose。
 
 图例：✅ 已有 · ◐ 部分（见备注） · ❌ 缺，计划补齐 · ⛔ 系统限制或产品决定不做（见“系统限制”） · — 不适用
 

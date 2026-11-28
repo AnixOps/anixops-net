@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Simplified Chinese (zh, read as zh-Hans: zh-CN, zh-SG and zh-Hans-*). Traditional Chinese is values-zh-rTW, which
-     zh-TW, zh-HK, zh-MO and zh-Hant-* pick by script. Wording follows the shared interface (apps/windows-gui/ui/src/labels.ts,
-     i18n-*.ts) until the strings come from one catalog for every client (docs/architecture/android-native-compose.md §7). -->
+     zh-TW, zh-HK, zh-MO and zh-Hant-* pick by script. Wording follows the shared terminology until the strings come from one catalog for every client (docs/architecture/android-native-compose.md §7). -->
 <resources>
 
     <string name="nav_home">首页</string>

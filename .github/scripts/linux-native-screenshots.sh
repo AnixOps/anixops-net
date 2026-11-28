@@ -3,7 +3,7 @@
 # Run inside a display and a session bus:
 #
 #   xvfb-run -a --server-args="-screen 0 2400x1600x24" dbus-run-session -- \
-#     linux-native-screenshots.sh <anixops-net-preview> <output directory>
+#     linux-native-screenshots.sh <anixops-net> <output directory>
 #
 # The window draws itself with its own renderer (`--screenshot`), so the files show what GTK lays out, not
 # what a screen grabber happens to catch.

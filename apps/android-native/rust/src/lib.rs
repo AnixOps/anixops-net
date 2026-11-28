@@ -7,8 +7,7 @@
 //!
 //! What only Android can do (the VPN, Downloads, the Keystore, the current network, notifications) the client
 //! asks of Kotlin through `bridge.call(method, argsJson)`, which answers in the same envelope ([`BridgePlatform`]).
-//! Command names and JSON shapes are the shared interface's (`bridge.ts`), so the Tauri windows and this app
-//! read one contract.
+//! Uses the same command names and JSON arguments as `client-core`.
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;

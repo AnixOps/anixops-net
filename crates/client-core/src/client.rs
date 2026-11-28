@@ -1,8 +1,5 @@
-//! The client service behind every window that drives this backend, free of Tauri: one [`Client`] answers the
-//! interface's commands by name ([`Client::invoke`], names and JSON shapes as in the shared interface's
-//! `bridge.ts`) and runs the background work (subscription updates, Wi-Fi rules, traffic counting, network
-//! changes). The Tauri window (`app.rs`) forwards its IPC here; the native Android app calls the same commands
-//! through JNI, so both read one contract.
+//! Shared client commands and background work for the native desktop services and the Android JNI bridge.
+//! [`Client::invoke`] dispatches commands by name and accepts JSON arguments.
 //!
 //! What the platform does itself (the system VPN, the shared Downloads folder, the key store, the current
 //! network, system notifications) sits behind [`Platform`].
@@ -2527,7 +2524,7 @@ fn download_failure(error: &reqwest::Error) -> String {
     }
 }
 
-/// A local subscription file, in the user's own process (the Tauri app, Android): only a regular file, at most
+/// A local subscription file, in the user's own process: only a regular file, at most
 /// [`MAX_SUBSCRIPTION_FILE_BYTES`]. Network and device paths (`\\server\share`, `\\.\`) are not opened on
 /// Windows.
 fn read_subscription_file(location: &str) -> Result<String, String> {
@@ -2672,44 +2669,6 @@ mod tests {
         let OnDemandUpdate { update } = parse(serde_json::json!({})).unwrap();
         assert!(update.is_none());
         assert!(parse::<NodeId>(serde_json::json!({"node_id": "a"})).is_err());
-    }
-
-    /// Every command the shared interface invokes (`bridge.ts`) has a handler here or is a Windows-only one,
-    /// so a command added for Windows and forgotten here fails this test instead of the Linux and Android
-    /// windows at run time.
-    #[test]
-    fn every_interface_command_is_answered() {
-        let bridge = include_str!("../../../apps/windows-gui/ui/src/bridge.ts");
-        let mut names = Vec::new();
-        for line in bridge.lines() {
-            let mut rest = line;
-            while let Some(at) = rest.find("invoke") {
-                rest = &rest[at + "invoke".len()..];
-                let Some(open) = rest.find("(\"") else {
-                    break;
-                };
-                let name: String = rest[open + 2..]
-                    .chars()
-                    .take_while(|c| c.is_ascii_lowercase() || *c == '_')
-                    .collect();
-                if !name.is_empty() {
-                    names.push(name);
-                }
-            }
-        }
-        assert!(
-            names.len() > 60,
-            "found only {} commands in bridge.ts",
-            names.len()
-        );
-        let missing: Vec<&String> = names
-            .iter()
-            .filter(|name| handler(name).is_none() && !WINDOWS_ONLY.contains(&name.as_str()))
-            .collect();
-        assert!(
-            missing.is_empty(),
-            "commands without a handler: {missing:?}"
-        );
     }
 
     struct NoPlatform;

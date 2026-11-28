@@ -4,7 +4,6 @@
   "action.close": { "zh": "关闭", "zh-Hant": "關閉", "en": "Close" },
   "action.save": { "zh": "保存", "zh-Hant": "儲存", "en": "Save" },
   "app.name": { "zh": "AnixOps Net", "zh-Hant": "AnixOps Net", "en": "AnixOps Net" },
-  "app.preview": { "zh": "预览", "zh-Hant": "預覽", "en": "Preview" },
   "checkup.again": { "zh": "再测一次", "zh-Hant": "再測一次", "en": "Run again" },
   "checkup.capped": { "zh": "达到 200 MB 上限，提前结束。", "zh-Hant": "達到 200 MB 上限，提前結束。", "en": "Stopped early at the 200 MB limit." },
   "checkup.failure.connect_failed": { "zh": "连接失败", "zh-Hant": "連線失敗", "en": "Connection failed" },

@@ -1,0 +1,62 @@
+{
+  "name": "AnixOps Design",
+  "repository": "https://github.com/AnixOps/anixops-design",
+  "version": "1.2.0",
+  "ref": "c345b8ee0f35d1ffd09ddd529688756d40dbe8c1",
+  "files": [
+    {
+      "path": "LICENSE",
+      "source": "LICENSE",
+      "bytes": 1271,
+      "sha256": "03a5c3a7c1610baf765c07e0acf0faf6e9bc865fd3b61fd85b26aa28e555c3d4"
+    },
+    {
+      "path": "LICENSE-BRAND.md",
+      "source": "LICENSE-BRAND.md",
+      "bytes": 1508,
+      "sha256": "e8978ef46a9d61673f3e76bb8429556de05238261ca6efa675fe75cc7435f3cc"
+    },
+    {
+      "path": "brand/products/net/app-icon-1024.png",
+      "source": "brand/assets/products/net/app-icon-1024.png",
+      "bytes": 34738,
+      "sha256": "9830331721b8c1b4d6789a3bf8a1a5787647a915210d31fafec650af76ef36d9"
+    },
+    {
+      "path": "brand/products/net/app-icon.svg",
+      "source": "brand/assets/products/net/app-icon.svg",
+      "bytes": 993,
+      "sha256": "ae9a81256a8bab953a07ec5c6f02e709a5e4e219d2415dbf62984b1a46239e1e"
+    },
+    {
+      "path": "brand/products/net/icon-256.png",
+      "source": "brand/assets/products/net/icon-256.png",
+      "bytes": 7346,
+      "sha256": "67889026fda0ee7c4954dfbc08057cc9aa4803713fe7895315f93bcf8a360b28"
+    },
+    {
+      "path": "brand/products/net/icon-512.png",
+      "source": "brand/assets/products/net/icon-512.png",
+      "bytes": 17596,
+      "sha256": "6575af43eec7a362c067be838ac285f2b09384aaf8d2fdc27b74ac2c074c5ad4"
+    },
+    {
+      "path": "brand/products/net/icon.icns",
+      "source": "brand/assets/products/net/icon.icns",
+      "bytes": 104956,
+      "sha256": "a20d7687b03911e6c7e4867a142636794e06fe85900ad007f18502df5f7fdac0"
+    },
+    {
+      "path": "brand/products/net/icon.ico",
+      "source": "brand/assets/products/net/icon.ico",
+      "bytes": 12937,
+      "sha256": "1b499d3d7e78a6f6664b8497a6a38e3f1da22d9a952fb92f0b589cc3da7454b8"
+    },
+    {
+      "path": "tokens.json",
+      "source": "tokens/tokens.json",
+      "bytes": 13115,
+      "sha256": "6c8178b7b10fcfbb7c323292dee132893d4b2edd19e040cd0f25f91284ac800f"
+    }
+  ]
+}
