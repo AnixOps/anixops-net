@@ -677,7 +677,7 @@ def settings_form(sections: int = 1, rows: int = 1, extra: str = "") -> str:
 
 def self_test() -> int:
     swift = next(s for s in SCOPES if s.name == "Apple")
-    css = next(s for s in SCOPES if s.name.startswith("Desktop (W"))
+    css = next(s for s in SCOPES if s.name == "Linux native")
     kotlin = next(s for s in SCOPES if s.name == "Android")
     cases = [
         (swift, "a.swift", "static let red = Color(red: 0.9, green: 0.2, blue: 0.3)", "U1"),
