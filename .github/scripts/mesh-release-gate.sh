@@ -17,7 +17,12 @@ fi
 # Everything that configures a release build: the workflows other than ci.yml, the composite actions, the scripts
 # the workflows run, cargo's configuration and every build script, the desktop Tauri configuration, the Apple project
 # and package, and the Android build scripts.
-mapfile -t files < <(
+# Read without `mapfile` and associative arrays, which the macOS runners' bash 3.2 lacks (ios-testflight.yml runs
+# this there).
+files=()
+while IFS= read -r file; do
+    files+=("${file}")
+done < <(
     {
         find .github/workflows -name '*.yml' ! -name ci.yml
         find .github/actions -type f
@@ -216,7 +221,11 @@ writers=(
     "withAllowMesh|2"
     "settingAllowMesh|2"
 )
-declare -A writer_calls=()
+# Calls per writer, by index into `writers`.
+writer_calls=()
+for index in "${!writers[@]}"; do
+    writer_calls[index]=0
+done
 while IFS= read -r file; do
     case "${file}" in
         */Tests/* | */test/* | */tests/* | */androidTest/* | */node_modules/*) continue ;;
@@ -230,17 +239,17 @@ while IFS= read -r file; do
         echo "::error file=${file}::${file} hard-codes allow_mesh true; it is the release gate's value (mesh::with_allow_mesh, EmbeddedRuntimeConfig.withAllowMesh)."
         found=1
     fi
-    for writer in "${writers[@]}"; do
-        name="${writer%%|*}"
+    for index in "${!writers[@]}"; do
+        name="${writers[index]%%|*}"
         calls=$(printf '%s\n' "${text}" | grep -E "(^|[^[:alnum:]_])${name}[[:space:]]*\(" | grep -Evc "(fn|func)[[:space:]]+${name}([^[:alnum:]_]|$)" || true)
-        writer_calls["${name}"]=$(( ${writer_calls["${name}"]:-0} + calls ))
+        writer_calls[index]=$(( writer_calls[index] + calls ))
     done
 done < <(find crates apps -type f \( -name '*.rs' -o -name '*.swift' -o -name '*.kt' -o -name '*.ts' \) -not -path '*/target/*' -not -path '*/node_modules/*')
-for writer in "${writers[@]}"; do
-    name="${writer%%|*}"
-    expected="${writer##*|}"
-    if [ "${writer_calls[${name}]:-0}" -ne "${expected}" ]; then
-        echo "::error::${name}( is called ${writer_calls[${name}]:-0} times in non-test code, expected exactly ${expected}; a new start path or writer of the engine's allow_mesh must be added to the 'writers' list in $(basename "$0") after review (and to the checks above), a removed one taken off it."
+for index in "${!writers[@]}"; do
+    name="${writers[index]%%|*}"
+    expected="${writers[index]##*|}"
+    if [ "${writer_calls[index]}" -ne "${expected}" ]; then
+        echo "::error::${name}( is called ${writer_calls[index]} times in non-test code, expected exactly ${expected}; a new start path or writer of the engine's allow_mesh must be added to the 'writers' list in $(basename "$0") after review (and to the checks above), a removed one taken off it."
         found=1
     fi
 done
