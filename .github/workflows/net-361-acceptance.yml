@@ -1,0 +1,268 @@
+name: Net 361 fixed-head desktop acceptance packages
+run-name: Net 361 desktop acceptance 91970f02cf102bae68f42400277266ea307c4f22
+
+on:
+  push:
+    branches: [acceptance/net-361-desktop]
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_SHA: 91970f02cf102bae68f42400277266ea307c4f22
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  windows:
+    name: Package ${{ matrix.platform }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [windows-tauri, windows-winui]
+    env:
+      ACCEPTANCE_PLATFORM: ${{ matrix.platform }}
+    steps:
+      - name: Checkout fixed source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Verify source
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
+        if: matrix.platform == 'windows-tauri'
+        with:
+          version: 9
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        if: matrix.platform == 'windows-tauri'
+        with:
+          node-version: 22
+      - name: Build shared UI
+        if: matrix.platform == 'windows-tauri'
+        shell: bash
+        run: |
+          pnpm --dir apps/windows-gui/ui install --frozen-lockfile
+          pnpm --dir apps/windows-gui/ui run build
+      - name: Setup Windows C toolchain
+        uses: msys2/setup-msys2@3c51bf698df1e37b2261f53cb67797b97761185c # v2.34.0
+        id: msys2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-binutils
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-libsystre
+
+      - name: Configure Windows Rust GNU target
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $MsysRoot = "${{ steps.msys2.outputs.msys2-location }}"
+          $MingwPrefix = Join-Path $MsysRoot "mingw64"
+          "${{ github.workspace }}\.github\scripts" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "$MingwPrefix\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "MSYS2_LOCATION=$MsysRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MINGW_PREFIX=$MingwPrefix" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RC_x86_64_pc_windows_gnu=${{ github.workspace }}\.github\scripts\rc.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CARGO_BUILD_TARGET=x86_64-pc-windows-gnu" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CC_x86_64_pc_windows_gnu=$MingwPrefix\bin\gcc.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "AR_x86_64_pc_windows_gnu=$MingwPrefix\bin\ar.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=$MingwPrefix\bin\gcc.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Setup Rust
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          # Pinned: Rust 1.100 lays build script outputs out as build/<crate>/<hash>/out, and tauri-build 2.6
+          # walks up from OUT_DIR to find the target directory, so the GUI build script fails with
+          # "The system cannot find the path specified". Move back to stable once tauri-build handles it.
+          rustup toolchain install 1.99.0 --profile minimal
+          rustup default 1.99.0
+          rustup target add x86_64-pc-windows-gnu
+
+
+      - name: Build resource compiler compatibility shims
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          rustc .github/scripts/windres_compat.rs -o .github/scripts/windres.exe
+          rustc .github/scripts/rc_compat.rs -o .github/scripts/rc.exe
+
+      - name: Build Windows Tauri portable package
+        if: matrix.platform == 'windows-tauri'
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $stage = New-Item -ItemType Directory -Path (Join-Path $env:RUNNER_TEMP 'net-tauri')
+          New-Item -ItemType Directory -Path acceptance-output | Out-Null
+          cargo build --locked --release -p networkcore-windows-gui -p anixops-net-link
+          $release = 'target/x86_64-pc-windows-gnu/release'
+          $metadata = cargo metadata --locked --format-version 1 | ConvertFrom-Json
+          $engineManifest = ($metadata.packages | Where-Object name -eq 'engine-embedded').manifest_path
+          if (-not $engineManifest) { throw "Pinned engine checkout is missing" }
+          $kernel = Split-Path (Split-Path (Split-Path $engineManifest))
+          cargo build --locked --release --manifest-path (Join-Path $kernel 'Cargo.toml') --target-dir target -p networkcore-windows
+          foreach ($file in @('networkcore-windows-gui.exe', 'anixops-net-link.exe', 'networkcore-windows.exe')) {
+            Copy-Item -LiteralPath (Join-Path $release $file) -Destination $stage.FullName
+          }
+          $loader = @(Get-ChildItem "$release/build" -Recurse -Filter WebView2Loader.dll | Where-Object {
+            $_.Directory.Name -eq 'x64' -and $_.Directory.Parent.Name -eq 'out' -and
+              $_.Directory.Parent.Parent.Name -like 'webview2-com-sys-*'
+          })
+          if ($loader.Count -ne 1) { throw "Expected exactly one x64 WebView2 loader, found $($loader.Count)" }
+          Copy-Item -LiteralPath $loader[0].FullName -Destination $stage.FullName
+          $null = & .github/scripts/fetch-wintun.ps1 -Destination $stage.FullName
+          Copy-Item -LiteralPath installer/windows/default-managed-config.json -Destination (Join-Path $stage.FullName 'managed-config.json')
+          Copy-Item -LiteralPath installer/windows/PORTABLE-README.txt -Destination (Join-Path $stage.FullName 'README.txt')
+          Copy-Item -LiteralPath LICENSE -Destination $stage.FullName
+          Compress-Archive -Path $stage.FullName -DestinationPath acceptance-output/net-361-windows-tauri-x64.zip
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73
+        if: matrix.platform == 'windows-winui'
+        with:
+          dotnet-version: 10.0.x
+      - name: Build unsigned WinUI installer and service
+        if: matrix.platform == 'windows-winui'
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $app = Join-Path $env:RUNNER_TEMP 'native-app'
+          $wintun = Join-Path $env:RUNNER_TEMP 'native-wintun'
+          cargo build --locked --release -p anixops-net-service -p client-mcp --bin anixops-net-service --bin anixops-mcp
+          $release = Join-Path $env:GITHUB_WORKSPACE 'target/x86_64-pc-windows-gnu/release'
+          $null = & .github/scripts/fetch-wintun.ps1 -Destination $wintun
+          dotnet publish apps/windows-native/src/AnixOps.Net.App/AnixOps.Net.App.csproj --configuration Release --runtime win-x64 --self-contained true --output $app
+          if (-not (Test-Path (Join-Path $app 'AnixOpsNet.exe'))) { throw "Missing WinUI executable" }
+          dotnet tool install --global wix --version 5.0.2
+          wix extension add -g WixToolset.Util.wixext/5.0.2
+          New-Item -ItemType Directory -Path acceptance-output | Out-Null
+          wix build installer/windows-native/Package.wxs -arch x64 -ext WixToolset.Util.wixext `
+            -d "ProductVersion=1.0.4" -d "AppDir=$app" `
+            -d "ServiceExe=$(Join-Path $release 'anixops-net-service.exe')" `
+            -d "McpExe=$(Join-Path $release 'anixops-mcp.exe')" -d "WintunDir=$wintun" `
+            -o acceptance-output/net-361-windows-winui-x64.msi
+
+      - name: Record provenance and SHA-256
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $bundle = @(Get-ChildItem acceptance-output -File)
+          if ($bundle.Count -ne 1) { throw "Expected one package" }
+          $file = $bundle[0]
+          $sha = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$sha  $($file.Name)" | Set-Content acceptance-output/SHA256SUMS.txt -Encoding ascii
+          $method = if ($env:ACCEPTANCE_PLATFORM -eq 'windows-tauri') {
+            'pnpm frozen UI build; cargo build --locked --release (Rust 1.99.0 GNU); portable ZIP, WebView2 Evergreen required'
+          } else {
+            'cargo build --locked --release (Rust 1.99.0 GNU); .NET 10 self-contained publish; WiX 5.0.2 unsigned MSI, requires administrator'
+          }
+          @(
+            "Source SHA: $env:SOURCE_SHA"
+            "Workflow SHA: $env:GITHUB_SHA"
+            "Platform: $env:ACCEPTANCE_PLATFORM x64"
+            "Runner: $env:ImageOS $env:ImageVersion"
+            "Build method: $method"
+            "Run: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+            "SHA-256: $sha  $($file.Name)"
+          ) | Tee-Object -FilePath acceptance-output/BUILD.txt | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+      - name: Upload package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: net-361-${{ matrix.platform }}-${{ env.SOURCE_SHA }}
+          path: acceptance-output/
+          retention-days: 7
+          if-no-files-found: error
+
+  linux:
+    name: Package ${{ matrix.platform }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [linux-tauri, linux-gtk]
+    env:
+      ACCEPTANCE_PLATFORM: ${{ matrix.platform }}
+    steps:
+      - name: Checkout fixed source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+      - name: Verify source
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+
+      - name: Install Tauri dependencies
+        if: matrix.platform == 'linux-tauri'
+        run: bash .github/scripts/apt-install.sh libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev
+      - name: Install GTK dependencies
+        if: matrix.platform == 'linux-gtk'
+        run: bash .github/scripts/apt-install.sh libgtk-4-dev libadwaita-1-dev
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
+        if: matrix.platform == 'linux-tauri'
+        with:
+          version: 9
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        if: matrix.platform == 'linux-tauri'
+        with:
+          node-version: 22
+      - name: Build shared UI
+        if: matrix.platform == 'linux-tauri'
+        shell: bash
+        run: |
+          pnpm --dir apps/windows-gui/ui install --frozen-lockfile
+          pnpm --dir apps/windows-gui/ui run build
+
+      - name: Setup stable Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - name: Build and bundle Linux desktop
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir acceptance-output
+          stage="$(mktemp -d)"
+          if [[ "$ACCEPTANCE_PLATFORM" == linux-tauri ]]; then
+            cargo build --locked --release -p networkcore-linux-gui --features gui --bin anixops-net
+            install -m 755 target/release/anixops-net "$stage/"
+            printf '%s\n' 'Ubuntu 24.04 x64: install libwebkit2gtk-4.1-0 libgtk-3-0t64 libayatana-appindicator3-1, then run ./anixops-net in a graphical session.' > "$stage/README.txt"
+            method='pnpm frozen UI build; cargo build --locked --release with gui; portable tar.gz'
+          else
+            cargo build --locked --release -p anixops-net-native --features gui --bin anixops-net-preview
+            cargo build --locked --release -p anixops-netd --bin anixops-netd
+            install -m 755 target/release/anixops-net-preview target/release/anixops-netd "$stage/"
+            printf '%s\n' 'Ubuntu 24.04 x64: install libgtk-4-1 libadwaita-1-0.' \
+              'From the extracted folder, start the daemon as the desktop user in a terminal:' \
+              '  ./anixops-netd --dir "$PWD/data" --socket "$PWD/acceptance.sock"' \
+              'In a graphical session, open a second terminal in the same folder and run:' \
+              '  ./anixops-net-preview --socket "$PWD/acceptance.sock"' > "$stage/README.txt"
+            method='cargo build --locked --release with gui plus daemon; portable tar.gz'
+          fi
+          install -m 644 LICENSE "$stage/"
+          bundle="net-361-$ACCEPTANCE_PLATFORM-x64.tar.gz"
+          tar -C "$stage" -czf "acceptance-output/$bundle" .
+          tar -tzf "acceptance-output/$bundle"
+          (
+            cd acceptance-output
+            sha256sum "$bundle" > SHA256SUMS.txt
+          )
+          {
+            printf 'Source SHA: %s\nWorkflow SHA: %s\nPlatform: %s x64\n' "$SOURCE_SHA" "$GITHUB_SHA" "$ACCEPTANCE_PLATFORM"
+            printf 'Runner: %s %s\nBuild method: %s, %s\n' "$ImageOS" "$ImageVersion" "$method" "$(rustc --version)"
+            printf 'Run: %s/%s/actions/runs/%s\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+            printf 'SHA-256: '
+            cat acceptance-output/SHA256SUMS.txt
+          } | tee acceptance-output/BUILD.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: net-361-${{ matrix.platform }}-${{ env.SOURCE_SHA }}
+          path: acceptance-output/
+          retention-days: 7
+          if-no-files-found: error
