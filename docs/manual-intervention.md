@@ -15,6 +15,19 @@
   保证比内核仓库上传过的 build 大。
 - [x] Windows MSI / 便携 ZIP 与 Linux GUI tarball / .deb 的发布 workflow 已迁入本仓库 `release.yml`（`v*` tag 发布，手动触发只打包和证明）。推送发布 tag 需要维护者明确同意。
 
+## 不向中国大陆提供客户端（2026-11-27）
+
+维护者 2026-11-27 决定：AnixOps Net 客户端不在中国大陆发行，项目不以规避任何国家或地区的网络管理规定为目的。
+用户协议 2.2.0 第 1 节「提供地区」写明了这一点，GitHub Pages 下载页也有说明。组网只走内网，不受这条规则影响。
+
+- [x] App Store Connect 的销售范围不含中国大陆和法国（2026-11-23 设置，见下文法国区一节）。
+- [x] 面板的 ANX 版下载（`/s/<token>/client`）和 TestFlight 邀请由 AnixOps-ansible `control-host` 的 nginx 按 APNIC
+  登记的中国大陆地址段返回 451；官网 anixops.com 的 Net 下载入口由 Cloudflare Worker 按访问者国家拦截。
+- [ ] Google Play：在 Play Console「测试 → 封闭测试 → 国家/地区」以及以后的正式版里，确认没有选中中国大陆。
+  Google Play 不在中国大陆提供服务，控制台通常不列出该地区；以控制台实际显示为准。改 Play 配置需要维护者同意。
+- [ ] GitHub Releases 和 GitHub Pages 下载页（anixops.github.io/anixops-net）不能按国家拒绝请求，目前只靠页面和用户协议说明。
+  如果要在这两处也拦截，需要把下载页迁到经 Cloudflare 代理的自有域名，并由维护者决定是否这样做。
+
 ## iOS TestFlight/App Store Connect Upload Workflow
 
 以下字段是后续 iOS release readiness 读取的机器状态。当前没有真实 Swift/Xcode source、signing、

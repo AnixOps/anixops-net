@@ -19,6 +19,8 @@ Output directory:
 
 Only the open-source edition is listed. The ANX edition (closed source) is never published here; the page
 points its users to the panel.
+The page states that the client is not offered in mainland China (TERMS.md section 1). GitHub Pages cannot
+refuse requests by country; the download channels we run ourselves do (docs/manual-intervention.md).
 
 Usage: download_page.py RELEASES_JSON OUT_DIR REPO
 """
@@ -173,6 +175,8 @@ def page(release, found, sums, repo, beta=None, beta_found=None):
 <h1>AnixOps Net 下载</h1>
 <p class="sub">{latest_label} <a href="{release_url}">{version}</a> · {published}</p>
 <p class="sub">这是开源版，支持 SS、SS-2022、VLESS、Trojan 等公开协议。</p>
+<p class="sub">本软件不向中国大陆提供。位于中国大陆的，请不要下载、安装或使用。使用前请阅读
+<a href="https://github.com/{html.escape(repo)}/blob/main/TERMS.md">用户协议</a>。</p>
 
 <h2>开源版</h2>
 <div class="grid">
