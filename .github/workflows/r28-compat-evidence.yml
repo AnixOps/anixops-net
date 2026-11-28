@@ -1,0 +1,66 @@
+name: R28 compatibility evidence
+
+on:
+  push:
+    branches: [kalijerry/net-11-dns-ui-evidence]
+
+permissions:
+  contents: read
+
+jobs:
+  mesh:
+    name: Linux mesh contracts (${{ matrix.core }}, ${{ matrix.gate }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        core: [default, rc.1]
+        gate: [closed, preview]
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+    steps:
+      - name: Checkout exact R28 client
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: 3af59e281e3d308b9efe0c3f1d10f804a2dea0b5
+          persist-credentials: false
+
+      - name: Checkout exact RC manifest and lockfile source
+        if: matrix.core == 'rc.1'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: a4efd839c352f9a398b8e97bb383f4b617257181
+          path: rc-client
+          persist-credentials: false
+
+      - name: Select and verify Core source
+        shell: bash
+        env:
+          CORE: ${{ matrix.core }}
+        run: |
+          set -euo pipefail
+          echo "Client $(git rev-parse HEAD)"
+          if [[ "$CORE" == 'rc.1' ]]; then
+            test "$(git -C rc-client rev-parse HEAD)" = a4efd839c352f9a398b8e97bb383f4b617257181
+            cp rc-client/Cargo.toml rc-client/Cargo.lock .
+            core_sha=ef52978586ce43e8c5a7376f987eb435650d9019
+          else
+            core_sha=6790d8675309d5d2cb719a5fcee4acca69735663
+          fi
+          test "$(sed -nE 's/.*networkcore_anixops", rev = "([0-9a-f]+)".*/\1/p' Cargo.toml | sort -u)" = "$core_sha"
+          test "$(sed -nE 's/^source = "git\+https:\/\/github.com\/AnixOps\/networkcore_anixops\?rev=([0-9a-f]+)#[0-9a-f]+"$/\1/p' Cargo.lock | sort -u)" = "$core_sha"
+          echo "Core $core_sha"
+
+      - name: Run client mesh and view contracts
+        shell: bash
+        env:
+          GATE: ${{ matrix.gate }}
+        run: |
+          set -euxo pipefail
+          unset ANIXOPS_MESH_PREVIEW ANIXOPS_MESH04_PREVIEW
+          if [[ "$GATE" == preview ]]; then export ANIXOPS_MESH_PREVIEW=1; fi
+          rustup toolchain install stable --profile minimal
+          cargo +stable test --locked -p client-core --lib backend::mesh::tests
+          cargo +stable test --locked -p client-view mesh
