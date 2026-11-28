@@ -1,0 +1,1 @@
+{"members":[{"name":"camera","address":"10.144.0.3","domain":"camera.lon.mesh.internal","sameNetwork":true},{"name":"printer","address":"10.144.0.9","domain":"printer.lon.mesh.internal","acrossRegions":true,"otherNetworks":["Lab"]}],"own":{"address":"10.144.0.2","domain":"laptop.lon.mesh.internal"}}

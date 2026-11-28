@@ -1,0 +1,3 @@
+*.status.json -text
+*.provenance.json -text
+SHA256SUMS text eol=lf

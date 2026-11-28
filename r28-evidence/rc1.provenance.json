@@ -1,0 +1,9 @@
+{
+  "coreSha": "ef52978586ce43e8c5a7376f987eb435650d9019",
+  "coreLabel": "core-0.3.1-rc.1",
+  "harnessSha": "1c2306534e6619a5ba7953a5922ba81ac3f92fed",
+  "run": "https://github.com/AnixOps/AnixOps-core/actions/runs/46096155351",
+  "command": "cargo test --locked -p outbound-mesh --features outbound --lib outbound::snapshot::tests",
+  "input": "Existing synthetic Rust fixtures, no deployment configuration or live peers",
+  "output": "Unmodified production snapshot() value written with serde_json::to_vec"
+}

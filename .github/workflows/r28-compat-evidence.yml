@@ -24,7 +24,7 @@ jobs:
       - name: Checkout exact R28 client
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: bdbbfebb81972bbd94e789c2794a70c3c7ab523b
+          ref: fbb734de1d05780421f7226c868aee14de54ac33
           persist-credentials: false
 
       - name: Checkout exact RC manifest and lockfile source
@@ -78,7 +78,7 @@ jobs:
       - name: Checkout exact R28 client
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: bdbbfebb81972bbd94e789c2794a70c3c7ab523b
+          ref: fbb734de1d05780421f7226c868aee14de54ac33
           path: client
           persist-credentials: false
 
@@ -109,6 +109,8 @@ jobs:
         run: |
           set -euxo pipefail
           unset ANIXOPS_MESH_PREVIEW ANIXOPS_MESH04_PREVIEW
+          (cd r28-evidence && sha256sum --check SHA256SUMS)
+          node -e 'const assert = require("node:assert/strict"); assert.equal(require("./r28-evidence/default.provenance.json").coreSha, "6790d8675309d5d2cb719a5fcee4acca69735663"); assert.equal(require("./r28-evidence/rc1.provenance.json").coreSha, "ef52978586ce43e8c5a7376f987eb435650d9019");'
           mkdir -p client/crates/client-view/examples
           cp crates/client-view/examples/project_mesh_status.rs client/crates/client-view/examples/
           cp apps/windows-gui/ui/screenshots/mesh-compat.cjs client/apps/windows-gui/ui/screenshots/
