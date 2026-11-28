@@ -1,0 +1,20 @@
+#!/bin/sh
+set -eu
+
+if [ "$1" = configure ]; then
+    unit=anixops-netd.service
+    deb-systemd-helper unmask "$unit"
+    if deb-systemd-helper was-enabled "$unit"; then
+        deb-systemd-helper enable "$unit"
+    else
+        deb-systemd-helper update-state "$unit"
+    fi
+    if [ -d /run/systemd/system ]; then
+        systemctl --system daemon-reload
+        if [ -n "${2:-}" ]; then
+            deb-systemd-invoke restart "$unit"
+        else
+            deb-systemd-invoke start "$unit"
+        fi
+    fi
+fi

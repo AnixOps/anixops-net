@@ -9,6 +9,11 @@ on:
   push:
     tags:
       - "v*"
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - installer/linux/**
+      - installer/windows-native/**
   workflow_dispatch:
     inputs:
       version:
@@ -28,10 +33,9 @@ env:
   LINUX_RUST_TOOLCHAIN: stable
   LINUX_RUST_PROFILE: minimal
   WINDOWS_TARGET: x86_64-pc-windows-gnu
-  # Pinned like the CI Windows job: tauri-build 2.6 fails with Rust 1.100's build directory layout.
-  WINDOWS_RUST_TOOLCHAIN: 1.99.0
+  WINDOWS_RUST_TOOLCHAIN: stable
   WINDOWS_RUST_PROFILE: minimal
-  WINDOWS_WIX_VERSION: 4.0.6
+  WINDOWS_WIX_VERSION: 5.0.2
 
 jobs:
   release-policy:
@@ -66,6 +70,13 @@ jobs:
           RELEASE_REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
+          if [ "${RELEASE_EVENT}" = "pull_request" ]; then
+            source_version="$(python3 -I .github/scripts/version.py check)"
+            source_version="${source_version#version }"
+            echo "version=v${source_version%%:*}" >> "${GITHUB_OUTPUT}"
+            echo "is_tag_release=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
           version_pattern='^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[1-9][0-9]*)?$'
           if [[ ! "${RELEASE_VERSION}" =~ ${version_pattern} ]]; then
             echo "::error::Release version must match vMAJOR.MINOR.PATCH, vMAJOR.MINOR.PATCH-alpha.N, vMAJOR.MINOR.PATCH-beta.N, or vMAJOR.MINOR.PATCH-rc.N."
@@ -167,6 +178,7 @@ jobs:
       # Checked before anything is built, so a release never goes out without notes or with an Android versionCode
       # that cannot install over the previous release.
       - name: Release notes and Android versionCode
+        if: github.event_name != 'pull_request'
         shell: bash
         env:
           VERSION: ${{ steps.policy.outputs.version }}
@@ -210,6 +222,7 @@ jobs:
 
   release-ci-gate:
     name: Release CI gate
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs:
@@ -365,6 +378,7 @@ jobs:
 
   package-linux-gui:
     name: Package Linux desktop client
+    if: ${{ !cancelled() && needs.release-policy.result == 'success' && needs.third-party-notices.result == 'success' && (github.event_name == 'pull_request' || needs.release-ci-gate.result == 'success') }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     needs:
@@ -385,36 +399,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Tauri on Linux renders through WebKitGTK.
-      - name: Install WebKitGTK
+      - name: Install native desktop dependencies
         shell: bash
-        run: |
-          bash .github/scripts/apt-install.sh libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-        with:
-          version: 9
-
-      - name: Setup Node
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: apps/windows-gui/ui/pnpm-lock.yaml
+        run: bash .github/scripts/apt-install.sh libgtk-4-dev libadwaita-1-dev
 
       - name: Download the third-party notices
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: third-party-notices-${{ needs.release-policy.outputs.version }}
           path: ${{ runner.temp }}/notices
-
-      # The Linux window shares the Windows React interface.
-      - name: Build the shared interface
-        shell: bash
-        run: |
-          pnpm --dir apps/windows-gui/ui install --frozen-lockfile
-          pnpm --dir apps/windows-gui/ui run build
 
       - name: Build and package the Linux desktop client
         id: package
@@ -442,9 +435,10 @@ jobs:
           rustup default "${RUST_TOOLCHAIN}"
           rustup target add "${TARGET}" --toolchain "${RUST_TOOLCHAIN}"
           test -f Cargo.lock
-          cargo build --locked --release --package networkcore-linux-gui --features gui --bin anixops-net --target "${TARGET}"
-          binary_path="target/${TARGET}/release/anixops-net"
-          test -x "${binary_path}"
+          cargo build --locked --release --target "${TARGET}" -p anixops-net-native --features gui
+          cargo build --locked --release --target "${TARGET}" -p anixops-netd -p client-mcp
+          release_bin="target/${TARGET}/release"
+          unit=apps/linux-daemon/packaging/anixops-netd.service
 
           version="${VERSION}"
           stem="anixops-net-linux-${version}-${TARGET}"
@@ -469,40 +463,14 @@ jobs:
           # Tarball: run in place from a versioned directory.
           staging="${dist_dir}/staging/${stem}"
           mkdir -p "${staging}/bin" "${staging}/share/applications" "${staging}/share/icons/hicolor/256x256/apps"
-          install -m 0755 "${binary_path}" "${staging}/bin/anixops-net"
-          install -m 0644 apps/linux-gui/icons/networkcore.png "${staging}/share/icons/hicolor/256x256/apps/anixops-net.png"
+          install -m 0755 "${release_bin}/anixops-net-preview" "${staging}/bin/anixops-net"
+          install -m 0755 "${release_bin}/anixops-netd" "${release_bin}/anixops-mcp" "${staging}/bin/"
+          install -Dm0644 "${unit}" "${staging}/lib/systemd/system/anixops-netd.service"
+          install -m 0644 apps/linux-native/data/anixops-net.png "${staging}/share/icons/hicolor/256x256/apps/anixops-net.png"
           desktop_entry anixops-net > "${staging}/share/applications/anixops-net.desktop"
           install -m 0644 LICENSE "${staging}/LICENSE"
           install -m 0644 "${NOTICES}" "${staging}/THIRD_PARTY_NOTICES.txt"
-          # Install integrity list the client checks at start (crates/client-health): paths beside bin/anixops-net.
-          mkdir -p "${staging}/share/anixops-net"
-          (cd "${staging}/bin" && sha256sum anixops-net) > "${staging}/share/anixops-net/integrity.sha256"
-          mkdir -p "${staging}/share/polkit-1/actions"
-          install -m 0644 apps/linux-gui/packaging/io.anixops.net.tun.policy "${staging}/share/polkit-1/actions/io.anixops.net.tun.policy"
-          cat > "${staging}/INSTALL.md" <<EOF
-          # AnixOps Net for Linux ${version}
-
-          Needs WebKitGTK 4.1 (Ubuntu 22.04+/Debian 12+: libwebkit2gtk-4.1-0) and a GNOME or KDE desktop.
-
-          Extract this archive into a directory you control and run bin/anixops-net. To add a menu entry,
-          copy share/applications/anixops-net.desktop to ~/.local/share/applications (set Exec to the full
-          path of bin/anixops-net) and share/icons to ~/.local/share/icons. The .deb package of the same
-          release installs these for you.
-
-          Connecting points the desktop proxy setting at 127.0.0.1:7890 and restores the previous setting
-          on disconnect, exit or next start. Settings live in \$XDG_CONFIG_HOME/anixops-net.
-
-          TUN mode (Settings > 运行方式) captures all traffic through a virtual adapter. Each connection
-          asks once, through pkexec (polkit), for the administrator password to create the adapter; the
-          app itself stays unprivileged. It needs pkexec and Linux 5.7 or later. The .deb also installs
-          share/polkit-1/actions/io.anixops.net.tun.policy so the prompt names the app.
-
-          Uninstall: quit the app, delete this directory and ~/.config/autostart/anixops-net.desktop if
-          you enabled start after login. Your subscriptions, settings and logs stay in
-          \$XDG_CONFIG_HOME/anixops-net (usually ~/.config/anixops-net), also after removing the .deb;
-          delete that directory to remove them (PRIVACY.md). Rollback: run the previous version's
-          extracted directory.
-          EOF
+          install -m 0644 installer/linux/INSTALL.md "${staging}/INSTALL.md"
           archive_name="${stem}.tar.gz"
           tar -czf "${output_dir}/${archive_name}" -C "${dist_dir}/staging" "${stem}"
 
@@ -512,8 +480,10 @@ jobs:
           deb_root="${dist_dir}/deb"
           mkdir -p "${deb_root}/DEBIAN" "${deb_root}/usr/bin" "${deb_root}/usr/share/applications" \
             "${deb_root}/usr/share/icons/hicolor/256x256/apps" "${deb_root}/usr/share/doc/anixops-net"
-          install -m 0755 "${binary_path}" "${deb_root}/usr/bin/anixops-net"
-          install -m 0644 apps/linux-gui/icons/networkcore.png "${deb_root}/usr/share/icons/hicolor/256x256/apps/anixops-net.png"
+          install -m 0755 "${release_bin}/anixops-net-preview" "${deb_root}/usr/bin/anixops-net"
+          install -m 0755 "${release_bin}/anixops-netd" "${release_bin}/anixops-mcp" "${deb_root}/usr/bin/"
+          install -Dm0644 "${unit}" "${deb_root}/usr/lib/systemd/system/anixops-netd.service"
+          install -m 0644 apps/linux-native/data/anixops-net.png "${deb_root}/usr/share/icons/hicolor/256x256/apps/anixops-net.png"
           desktop_entry /usr/bin/anixops-net > "${deb_root}/usr/share/applications/anixops-net.desktop"
           # Debian copyright file (DEP-5): the client's own license, and where the third-party notices are.
           install -m 0644 "${NOTICES}" "${deb_root}/usr/share/doc/anixops-net/THIRD_PARTY_NOTICES.txt"
@@ -534,11 +504,9 @@ jobs:
             sed -e 's/^[[:space:]]*$/./' -e 's/^/ /' LICENSE
           } > "${deb_root}/usr/share/doc/anixops-net/copyright"
           chmod 0644 "${deb_root}/usr/share/doc/anixops-net/copyright"
-          mkdir -p "${deb_root}/usr/share/anixops-net"
-          (cd "${deb_root}/usr/bin" && sha256sum anixops-net) > "${deb_root}/usr/share/anixops-net/integrity.sha256"
-          # TUN mode: pkexec runs /usr/bin/anixops-net --tun-helper under this action (tun_helper.rs).
-          mkdir -p "${deb_root}/usr/share/polkit-1/actions"
-          install -m 0644 apps/linux-gui/packaging/io.anixops.net.tun.policy "${deb_root}/usr/share/polkit-1/actions/io.anixops.net.tun.policy"
+          for script in postinst prerm postrm; do
+            install -m 0755 "installer/linux/${script}" "${deb_root}/DEBIAN/${script}"
+          done
           installed_size="$(du -sk "${deb_root}/usr" | cut -f1)"
           cat > "${deb_root}/DEBIAN/control" <<EOF
           Package: anixops-net
@@ -546,19 +514,27 @@ jobs:
           Section: net
           Priority: optional
           Architecture: amd64
-          Depends: libwebkit2gtk-4.1-0, libgtk-3-0
-          Recommends: pkexec | policykit-1
+          Depends: libgtk-4-1 (>= 4.14), libadwaita-1-0 (>= 1.5), init-system-helpers (>= 1.54)
+          Recommends: systemd
           Installed-Size: ${installed_size}
           Maintainer: AnixOps <noreply@github.com>
           Homepage: https://github.com/AnixOps/anixops-net
           Description: AnixOps Net desktop proxy client
            Imports subscriptions and share links, switches nodes, runs delay tests and
            points the desktop proxy setting at a local SOCKS5/HTTP port while connected,
-           or captures all traffic through a TUN adapter created by a polkit helper.
+           or captures all traffic through a TUN adapter managed by its system service.
           EOF
           deb_name="anixops-net_${deb_version}_amd64.deb"
           dpkg-deb --root-owner-group --build "${deb_root}" "${output_dir}/${deb_name}"
           dpkg-deb --info "${output_dir}/${deb_name}" >/dev/null
+          dpkg-deb --extract "${output_dir}/${deb_name}" "${dist_dir}/deb-inspection"
+          tar -xzf "${output_dir}/${archive_name}" -C "${dist_dir}"
+          for binary in anixops-net anixops-netd anixops-mcp; do
+            test -x "${dist_dir}/deb-inspection/usr/bin/${binary}"
+            test -x "${dist_dir}/${stem}/bin/${binary}"
+          done
+          cmp "${unit}" "${dist_dir}/deb-inspection/usr/lib/systemd/system/anixops-netd.service"
+          cmp "${unit}" "${dist_dir}/${stem}/lib/systemd/system/anixops-netd.service"
           # Both packages carry the license notices.
           for notice in ./usr/share/doc/anixops-net/copyright ./usr/share/doc/anixops-net/THIRD_PARTY_NOTICES.txt; do
             if ! dpkg-deb -c "${output_dir}/${deb_name}" | awk '{ print $NF }' | grep -qxF "${notice}"; then
@@ -594,10 +570,10 @@ jobs:
                 release_run_url: $release_run_url,
                 runner: "ubuntu-latest",
                 rust_toolchain: $rust_toolchain,
-                source: "apps/linux-gui+apps/windows-gui/ui",
+                source: "apps/linux-native+apps/linux-daemon+crates/client-mcp",
                 checksum: {algorithm: "sha256", file_name: ($artifact_name + ".sha256"), value: $checksum_value},
-                runtime_dependencies: ["libwebkit2gtk-4.1-0", "libgtk-3-0"],
-                system_mutation_policy: "desktop-proxy-setting-while-connected-restored-on-disconnect",
+                runtime_dependencies: ["GTK >= 4.14", "libadwaita >= 1.5", "systemd"],
+                system_mutation_policy: "systemd-core-and-user-session-proxy",
                 signing: {
                   signing_policy: "unsigned-no-detached-signature",
                   attestation_policy: "github-artifact-attestation-required",
@@ -667,6 +643,7 @@ jobs:
 
   package-windows:
     name: Package Windows managed client
+    if: ${{ !cancelled() && needs.release-policy.result == 'success' && needs.third-party-notices.result == 'success' && (github.event_name == 'pull_request' || needs.release-ci-gate.result == 'success') }}
     runs-on: windows-latest
     timeout-minutes: 45
     needs:
@@ -705,15 +682,10 @@ jobs:
           name: third-party-notices-${{ needs.release-policy.outputs.version }}
           path: ${{ runner.temp }}/notices
 
-      - name: Setup pnpm for Windows GUI assets
-        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - name: Setup .NET
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
-          version: 9.15.4
-
-      - name: Setup Node for Windows GUI assets
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 22
+          dotnet-version: 10.0.x
 
       - name: Setup Windows C toolchain
         uses: msys2/setup-msys2@3c51bf698df1e37b2261f53cb67797b97761185c # v2.34.0
@@ -749,7 +721,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           dotnet tool install --global wix --version $env:WIX_VERSION
-          wix extension add -g "WixToolset.UI.wixext/$env:WIX_VERSION"
+          wix extension add -g "WixToolset.Util.wixext/$env:WIX_VERSION"
           wix --version
 
       - name: Build, validate, checksum, and manifest Windows managed client
@@ -773,8 +745,6 @@ jobs:
           }
           $noticesPath = (Resolve-Path $env:NOTICES).Path
           $licensePath = (Resolve-Path LICENSE).Path
-          pnpm --dir apps/windows-gui/ui install --frozen-lockfile
-          pnpm --dir apps/windows-gui/ui run build
           $checkoutSha = (git rev-parse HEAD).Trim()
           if ($checkoutSha -ne $env:RELEASE_SHA) {
             throw "Checkout SHA $checkoutSha does not match release SHA $env:RELEASE_SHA."
@@ -789,21 +759,6 @@ jobs:
           if (-not (Test-Path -Path Cargo.lock -PathType Leaf)) {
             throw "Cargo.lock must be checked in before creating release artifacts."
           }
-          # The CLI is the kernel's: build it from the pinned kernel checkout with the kernel's own lockfile.
-          # Same lookup as .github/scripts/kernel-root.sh: <kernel>/crates/engine-embedded/Cargo.toml.
-          $metadata = cargo metadata --format-version 1 --locked | ConvertFrom-Json
-          $engineManifest = ($metadata.packages | Where-Object { $_.name -eq "engine-embedded" }).manifest_path
-          if (-not $engineManifest -or -not (Test-Path $engineManifest -PathType Leaf)) {
-            throw "Could not locate the pinned kernel checkout."
-          }
-          $kernelRoot = Split-Path (Split-Path (Split-Path $engineManifest))
-          Write-Output "Kernel checkout: $kernelRoot"
-          cargo build --locked --release `
-            --manifest-path (Join-Path $kernelRoot "Cargo.toml") `
-            --target-dir target `
-            --package networkcore-windows `
-            --target $env:TARGET
-          if ($LASTEXITCODE -ne 0) { throw "Kernel Windows CLI build failed." }
           $version = $env:VERSION
           $target = $env:TARGET
           if ($version -notmatch '^v([0-9]+)\.([0-9]+)\.([0-9]+)(?:-(alpha|beta|rc)\.([1-9][0-9]*))?$') {
@@ -838,62 +793,22 @@ jobs:
             throw "Mapped MSI product version exceeds Windows Installer limits."
           }
           $productVersion = "$major.$minor.$msiBuild"
-          # The GUI's file version is the MSI version (major.minor.patch.msiBuild), so it rises with every
-          # release: the MSI removes the earlier version only after installing this one
-          # (MajorUpgrade afterInstallExecute) and replaces a versioned file only with a higher version.
-          $guiFileVersion = "$major.$minor.$patch.$msiBuild"
-          $env:TAURI_CONFIG = (@{ version = "$major.$minor.$patch+$msiBuild" } | ConvertTo-Json -Compress)
-          cargo build --locked --release `
-            --package networkcore-windows-gui `
-            --target $env:TARGET
-          if ($LASTEXITCODE -ne 0) { throw "Windows GUI build failed." }
-          Remove-Item Env:TAURI_CONFIG
-          # The anixops:// handler, installed beside the GUI (apps/windows-link).
-          cargo build --locked --release `
-            --package anixops-net-link `
-            --target $env:TARGET
-          if ($LASTEXITCODE -ne 0) { throw "anixops:// handler build failed." }
-
-          $releaseDir = "target\$env:TARGET\release"
-          $cliPath = Join-Path $releaseDir "networkcore-windows.exe"
-          $guiPath = Join-Path $releaseDir "networkcore-windows-gui.exe"
-          $linkPath = Join-Path $releaseDir "anixops-net-link.exe"
-          foreach ($binaryPath in @($cliPath, $guiPath, $linkPath)) {
-            if (-not (Test-Path -Path $binaryPath -PathType Leaf)) {
-              throw "Windows release binary not found: $binaryPath"
-            }
+          $appDir = Join-Path $env:RUNNER_TEMP "native-app"
+          dotnet publish apps/windows-native/src/AnixOps.Net.App/AnixOps.Net.App.csproj `
+            --configuration Release --runtime win-x64 --self-contained true --output $appDir `
+            "-p:Version=$major.$minor.$patch" "-p:FileVersion=$major.$minor.$patch.$msiBuild"
+          if ($LASTEXITCODE -ne 0) { throw "Windows native app publish failed." }
+          $guiPath = Join-Path $appDir "AnixOpsNet.exe"
+          cargo build --locked --release --target $env:TARGET -p anixops-net-service -p client-mcp
+          if ($LASTEXITCODE -ne 0) { throw "Windows service or MCP build failed." }
+          $releaseDir = (Resolve-Path "target/$env:TARGET/release").Path
+          $servicePath = Join-Path $releaseDir "anixops-net-service.exe"
+          $mcpPath = Join-Path $releaseDir "anixops-mcp.exe"
+          foreach ($binaryPath in @($guiPath, $servicePath, $mcpPath)) {
+            if (-not (Test-Path $binaryPath -PathType Leaf)) { throw "Missing $binaryPath" }
           }
-          $cliPath = (Resolve-Path $cliPath).Path
-          $guiPath = (Resolve-Path $guiPath).Path
-          $linkPath = (Resolve-Path $linkPath).Path
-          # The handler must run with the rights of whoever opens the link, unlike the GUI.
-          $linkText = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($linkPath))
-          foreach ($level in @("requireAdministrator", "highestAvailable")) {
-            if ($linkText.Contains($level)) { throw "anixops-net-link.exe asks for $level." }
-          }
-          $guiInfo = (Get-Item $guiPath).VersionInfo
-          $builtFileVersion = "$($guiInfo.FileMajorPart).$($guiInfo.FileMinorPart).$($guiInfo.FileBuildPart).$($guiInfo.FilePrivatePart)"
-          if ($builtFileVersion -ne $guiFileVersion) {
-            throw "The GUI's file version is $builtFileVersion, not the release's $guiFileVersion."
-          }
-          $webView2LoaderCandidates = @(
-            Get-ChildItem -Path (Join-Path $releaseDir "build") -Recurse -Filter "WebView2Loader.dll" |
-              Where-Object {
-                $_.Directory.Name -eq "x64" -and
-                $_.Directory.Parent.Name -eq "out" -and
-                $_.Directory.Parent.Parent.Name -like "webview2-com-sys-*"
-              }
-          )
-          if ($webView2LoaderCandidates.Count -ne 1) {
-            $candidatePaths = $webView2LoaderCandidates.FullName -join ", "
-            throw "Expected exactly one x64 WebView2Loader.dll generated by webview2-com-sys; found $($webView2LoaderCandidates.Count): $candidatePaths"
-          }
-          $webView2LoaderPath = $webView2LoaderCandidates[0].FullName
-          if ((Get-Item $webView2LoaderPath).Length -le 0) {
-            throw "WebView2Loader.dll is empty: $webView2LoaderPath"
-          }
-          $defaultConfigPath = (Resolve-Path "installer\windows\default-managed-config.json").Path
-          $portableReadmePath = (Resolve-Path "installer\windows\PORTABLE-README.txt").Path
+          Copy-Item $licensePath (Join-Path $appDir "LICENSE.txt")
+          Copy-Item $noticesPath (Join-Path $appDir "THIRD_PARTY_NOTICES.txt")
 
           $artifactStem = "networkcore-windows-$version-$target"
           $distDir = "dist\windows\$target"
@@ -922,31 +837,17 @@ jobs:
           New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
           $wintunPath = & .github/scripts/fetch-wintun.ps1 -Destination (Join-Path $env:RUNNER_TEMP "wintun")
           $wintunLicensePath = Join-Path (Split-Path $wintunPath) "wintun-LICENSE.txt"
-          # Install integrity list the client checks at start (crates/client-health), in the MSI and the ZIP.
-          $integrityPath = Join-Path $distDir "integrity\integrity.sha256"
-          & .github/scripts/write-integrity.ps1 -Output $integrityPath -Entry @(
-            "networkcore-windows-gui.exe=$guiPath",
-            "anixops-net-link.exe=$linkPath",
-            "networkcore-windows.exe=$cliPath",
-            "WebView2Loader.dll=$webView2LoaderPath",
-            "wintun.dll=$wintunPath"
-          )
-          wix build installer/windows/Package.wxs `
-            -ext WixToolset.UI.wixext `
+          wix build installer/windows-native/Package.wxs `
+            -ext WixToolset.Util.wixext `
             -arch x64 `
             -d "ProductVersion=$productVersion" `
-            -d "CliExe=$cliPath" `
-            -d "GuiExe=$guiPath" `
-            -d "LinkExe=$linkPath" `
-            -d "WebView2LoaderDll=$webView2LoaderPath" `
-            -d "WintunDll=$wintunPath" `
-            -d "DefaultConfig=$defaultConfigPath" `
-            -d "IntegrityList=$integrityPath" `
-            -d "LicenseFile=$licensePath" `
-            -d "NoticesFile=$noticesPath" `
-            -d "WintunLicense=$wintunLicensePath" `
+            -d "AppDir=$appDir" `
+            -d "ServiceExe=$servicePath" `
+            -d "McpExe=$mcpPath" `
+            -d "WintunDir=$(Split-Path $wintunPath)" `
             -o $archivePath
-          wix msi validate $archivePath
+          if ($LASTEXITCODE -ne 0) { throw "Windows MSI build failed." }
+          wix msi validate -sice ICE03 $archivePath
           if ($LASTEXITCODE -ne 0) { throw "$archivePath did not validate." }
           & .github/scripts/check-windows-icons.ps1 -Msi $archivePath -Exe @($guiPath)
           # The MSI carries the license notices: an administrative image lists the files it installs.
@@ -965,26 +866,17 @@ jobs:
           Remove-Item -Force $wixPdbPath -ErrorAction SilentlyContinue
 
           New-Item -ItemType Directory -Force -Path $portableStageDir | Out-Null
-          Copy-Item -Path $cliPath -Destination (Join-Path $portableStageDir "networkcore-windows.exe")
-          Copy-Item -Path $guiPath -Destination (Join-Path $portableStageDir "networkcore-windows-gui.exe")
-          Copy-Item -Path $linkPath -Destination (Join-Path $portableStageDir "anixops-net-link.exe")
-          Copy-Item -Path $webView2LoaderPath -Destination (Join-Path $portableStageDir "WebView2Loader.dll")
-          Copy-Item -Path $wintunPath -Destination (Join-Path $portableStageDir "wintun.dll")
-          Copy-Item -Path $wintunLicensePath -Destination (Join-Path $portableStageDir "wintun-LICENSE.txt")
-          Copy-Item -Path $licensePath -Destination (Join-Path $portableStageDir "LICENSE.txt")
-          Copy-Item -Path $noticesPath -Destination (Join-Path $portableStageDir "THIRD_PARTY_NOTICES.txt")
-          Copy-Item -Path $defaultConfigPath -Destination (Join-Path $portableStageDir "managed-config.json")
-          Copy-Item -Path $portableReadmePath -Destination (Join-Path $portableStageDir "README.txt")
-          Copy-Item -Path $integrityPath -Destination (Join-Path $portableStageDir "integrity.sha256")
+          Copy-Item (Join-Path $appDir "*") $portableStageDir -Recurse
+          Get-ChildItem $portableStageDir -Recurse -File -Filter *.pdb | Remove-Item
+          Copy-Item @($servicePath, $mcpPath, $wintunPath, $wintunLicensePath) $portableStageDir
+          Copy-Item installer/windows-native/PORTABLE-README.txt (Join-Path $portableStageDir "README.txt")
           Compress-Archive -Path $portableStageDir -DestinationPath $portableArchivePath -CompressionLevel Optimal
           $portableInspectionDir = Join-Path $distDir "portable-inspection"
           Expand-Archive -Path $portableArchivePath -DestinationPath $portableInspectionDir
-          $portableLoaderPath = Join-Path $portableInspectionDir "$portableStem\WebView2Loader.dll"
-          if (-not (Test-Path -Path $portableLoaderPath -PathType Leaf)) {
-            throw "Portable ZIP does not contain WebView2Loader.dll beside the GUI executable."
-          }
-          if ((Get-Item $portableLoaderPath).Length -le 0) {
-            throw "Portable ZIP contains an empty WebView2Loader.dll."
+          foreach ($binary in @("AnixOpsNet.exe", "anixops-net-service.exe", "anixops-mcp.exe", "wintun.dll")) {
+            if (-not (Test-Path (Join-Path $portableInspectionDir "$portableStem/$binary") -PathType Leaf)) {
+              throw "Portable ZIP does not contain $binary."
+            }
           }
           foreach ($notice in @("LICENSE.txt", "THIRD_PARTY_NOTICES.txt", "wintun-LICENSE.txt")) {
             $noticeFile = Join-Path $portableInspectionDir "$portableStem\$notice"
@@ -1000,7 +892,7 @@ jobs:
           "$checksumValue  $archiveName" | Set-Content -Path $archiveChecksumPath -Encoding ascii
           $archiveSize = (Get-Item $archivePath).Length
           $manifest = [ordered]@{
-            schema_version = 2
+            schema_version = 3
             artifact_kind = "windows-managed-client-msi"
             package_format = "msi"
             artifact_name = $archiveName
@@ -1025,32 +917,17 @@ jobs:
               value = $checksumValue
             }
             included_files = @(
-              [ordered]@{ path = "networkcore-windows-gui.exe"; kind = "binary"; required = $true; source = "apps/windows-gui" },
-              [ordered]@{ path = "anixops-net-link.exe"; kind = "binary"; required = $true; source = "apps/windows-link" },
-              [ordered]@{ path = "WebView2Loader.dll"; kind = "runtime"; required = $true; source = "webview2-com-sys@0.38.2/x64" },
+              [ordered]@{ path = "AnixOpsNet.exe"; kind = "binary"; required = $true; source = "apps/windows-native" },
+              [ordered]@{ path = "anixops-net-service.exe"; kind = "binary"; required = $true; source = "apps/windows-service" },
+              [ordered]@{ path = "anixops-mcp.exe"; kind = "binary"; required = $true; source = "crates/client-mcp" },
               [ordered]@{ path = "wintun.dll"; kind = "runtime"; required = $true; source = "wintun.net/builds/wintun-0.14.1.zip:bin/amd64" },
-              [ordered]@{ path = "networkcore-windows.exe"; kind = "binary"; required = $true; source = "AnixOps/networkcore_anixops:apps/windows-cli" },
-              [ordered]@{ path = "managed-config.json"; kind = "configuration"; required = $true; source = "installer/windows/default-managed-config.json" },
-              [ordered]@{ path = "integrity.sha256"; kind = "integrity"; required = $true; source = ".github/scripts/write-integrity.ps1" },
+              [ordered]@{ path = "wintun-LICENSE.txt"; kind = "documentation"; required = $true; source = "wintun.net/builds/wintun-0.14.1.zip:LICENSE.txt" },
               [ordered]@{ path = "LICENSE.txt"; kind = "documentation"; required = $true; source = "LICENSE" },
-              [ordered]@{ path = "THIRD_PARTY_NOTICES.txt"; kind = "documentation"; required = $true; source = ".github/actions/third-party-notices" },
-              [ordered]@{ path = "wintun-LICENSE.txt"; kind = "documentation"; required = $true; source = "wintun.net/builds/wintun-0.14.1.zip:LICENSE.txt" }
+              [ordered]@{ path = "THIRD_PARTY_NOTICES.txt"; kind = "documentation"; required = $true; source = ".github/actions/third-party-notices" }
             )
             install_model = "wix-per-machine-msi"
-            system_mutation_policy = "managed-apply-and-rollback"
-            source_identity = "apps/windows-gui+apps/windows-cli+platform-windows+installer/windows"
-            capability_anchor = "windows-release-assets"
-            subscription_compatibility = "parser-gates-active-run-compat-deferred"
-            active_operations = @(
-              "install-signed-inf-driver-package",
-              "run-wix-installer",
-              "mutate-system-proxy",
-              "mutate-system-trust-store",
-              "remove-legacy-windows-service"
-            )
-            blocked_operations = @(
-              "execute-javascript-dispatch"
-            )
+            system_mutation_policy = "windows-service-and-user-session"
+            source_identity = "apps/windows-native+apps/windows-service+crates/client-mcp+installer/windows-native"
             signing = [ordered]@{
               signing_policy = "unsigned-no-authenticode-with-github-attestation"
               signing_status = "not-signed-by-policy"
@@ -1080,7 +957,7 @@ jobs:
           "$portableChecksumValue  $portableArchiveName" | Set-Content -Path $portableChecksumPath -Encoding ascii
           $portableArchiveSize = (Get-Item $portableArchivePath).Length
           $portableManifest = [ordered]@{
-            schema_version = 2
+            schema_version = 3
             artifact_kind = "windows-managed-client-portable-zip"
             package_format = "zip"
             artifact_name = $portableArchiveName
@@ -1103,32 +980,18 @@ jobs:
               value = $portableChecksumValue
             }
             included_files = @(
-              [ordered]@{ path = "$portableStem/networkcore-windows-gui.exe"; kind = "binary"; required = $true; source = "apps/windows-gui" },
-              [ordered]@{ path = "$portableStem/anixops-net-link.exe"; kind = "binary"; required = $true; source = "apps/windows-link" },
-              [ordered]@{ path = "$portableStem/WebView2Loader.dll"; kind = "runtime"; required = $true; source = "webview2-com-sys@0.38.2/x64" },
+              [ordered]@{ path = "$portableStem/AnixOpsNet.exe"; kind = "binary"; required = $true; source = "apps/windows-native" },
+              [ordered]@{ path = "$portableStem/anixops-net-service.exe"; kind = "binary"; required = $true; source = "apps/windows-service" },
+              [ordered]@{ path = "$portableStem/anixops-mcp.exe"; kind = "binary"; required = $true; source = "crates/client-mcp" },
               [ordered]@{ path = "$portableStem/wintun.dll"; kind = "runtime"; required = $true; source = "wintun.net/builds/wintun-0.14.1.zip:bin/amd64" },
               [ordered]@{ path = "$portableStem/wintun-LICENSE.txt"; kind = "documentation"; required = $true; source = "wintun.net/builds/wintun-0.14.1.zip:LICENSE.txt" },
-              [ordered]@{ path = "$portableStem/networkcore-windows.exe"; kind = "binary"; required = $true; source = "AnixOps/networkcore_anixops:apps/windows-cli" },
-              [ordered]@{ path = "$portableStem/managed-config.json"; kind = "configuration"; required = $true; source = "installer/windows/default-managed-config.json" },
-              [ordered]@{ path = "$portableStem/README.txt"; kind = "documentation"; required = $true; source = "installer/windows/PORTABLE-README.txt" },
               [ordered]@{ path = "$portableStem/LICENSE.txt"; kind = "documentation"; required = $true; source = "LICENSE" },
               [ordered]@{ path = "$portableStem/THIRD_PARTY_NOTICES.txt"; kind = "documentation"; required = $true; source = ".github/actions/third-party-notices" },
-              [ordered]@{ path = "$portableStem/integrity.sha256"; kind = "integrity"; required = $true; source = ".github/scripts/write-integrity.ps1" }
+              [ordered]@{ path = "$portableStem/README.txt"; kind = "documentation"; required = $true; source = "installer/windows-native/PORTABLE-README.txt" }
             )
             install_model = "manual-extract"
-            system_mutation_policy = "explicit-gui-command-only"
-            source_identity = "apps/windows-gui+apps/windows-cli+platform-windows+installer/windows"
-            capability_anchor = "windows-portable-release-assets"
-            active_operations = @(
-              "run-native-gui",
-              "explicit-system-proxy-mutation",
-              "explicit-system-trust-store-mutation",
-              "remove-legacy-windows-service"
-            )
-            blocked_operations = @(
-              "windows-service-registration",
-              "execute-javascript-dispatch"
-            )
+            system_mutation_policy = "foreground-core-and-user-session"
+            source_identity = "apps/windows-native+apps/windows-service+crates/client-mcp+installer/windows-native"
             signing = [ordered]@{
               signing_policy = "unsigned-no-authenticode-with-github-attestation"
               signing_status = "not-signed-by-policy"
@@ -1206,9 +1069,9 @@ jobs:
             "| Manifest | $manifestName |",
             "| Manifest sha256 | $manifestChecksumValue |",
             "| Target | $target |",
-            "| Source identity | GUI + CLI + platform + WiX |",
+            "| Source identity | WinUI + core service + MCP + WiX |",
             "| Install model | wix-per-machine-msi |",
-            "| System mutation policy | managed-apply-and-rollback |",
+            "| System mutation policy | windows-service-and-user-session |",
             "",
             "### Windows Portable ZIP",
             "",
@@ -1219,7 +1082,7 @@ jobs:
             "| Manifest | $portableManifestName |",
             "| Manifest sha256 | $portableManifestChecksumValue |",
             "| Install model | manual-extract |",
-            "| System mutation policy | explicit-gui-command-only |"
+            "| System mutation policy | foreground-core-and-user-session |"
           ) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
       - name: Upload Windows release bundle
@@ -1239,6 +1102,7 @@ jobs:
           if-no-files-found: error
 
   attest-linux-gui:
+    if: github.event_name != 'pull_request'
     name: Attest Linux desktop client bundle
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -1279,6 +1143,7 @@ jobs:
         run: echo "attestation_status=attested" >> "${GITHUB_OUTPUT}"
 
   attest-windows:
+    if: github.event_name != 'pull_request'
     name: Attest Windows managed client bundle
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -1365,6 +1230,7 @@ jobs:
   # A run from main (build check only) does not enter the environment and signs with a throwaway key.
   # docs/manual-intervention.md, 安卓正式签名密钥.
   package-android:
+    if: github.event_name != 'pull_request'
     name: Package Android APK
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -1658,15 +1524,15 @@ jobs:
           | 平台 | 文件 | 说明 |
           | --- | --- | --- |
           | Windows 10/11 | \`anixops-net-${VERSION}-windows-x64.msi\` | 安装版（推荐） |
-          | Windows 10/11 | \`anixops-net-${VERSION}-windows-x64-portable.zip\` | 便携版，解压即用 |
+          | Windows 10/11 | \`anixops-net-${VERSION}-windows-x64-portable.zip\` | 便携版，按 README 以管理员权限启动核心，再打开界面 |
           | Debian / Ubuntu | \`anixops-net-${VERSION}-linux-amd64.deb\` | \`sudo apt install ./<文件名>\` |
-          | 其他 Linux | \`anixops-net-${VERSION}-linux-x64.tar.gz\` | 解压后运行 \`bin/anixops-net\` |
+          | 其他 Linux | \`anixops-net-${VERSION}-linux-x64.tar.gz\` | 解压后按 INSTALL.md 配置服务，再运行 \`bin/anixops-net\` |
           | 安卓 | \`${ANDROID_APK}\` | ${android_note} |
 
           这是开源版，只含公开协议。需要 ANX 协议的用户请在服务商面板里下载 ANX 版（iOS 只有 ANX 版，通过 TestFlight 分发）。
           所有平台的最新版下载链接汇总在 [下载页](https://anixops.github.io/anixops-net/)。
 
-          - Linux 版需要 WebKitGTK 4.1。
+          - Linux 版需要 GTK 4.14、libadwaita 1.5 与 systemd（例如 Ubuntu 24.04 或 Debian 13）。
           - 校验：\`sha256sum -c SHA256SUMS\`（Windows 用 \`Get-FileHash <文件> -Algorithm SHA256\` 与 SHA256SUMS 比对）；来源证明：\`gh attestation verify <文件> --repo ${GH_REPO}\`。
           - Windows 安装包未做 Authenticode 代码签名，安装前应先完成上述两项校验。两项均通过后，如出现 SmartScreen 提示，可选择「更多信息 → 仍要运行」。镜像、转发或企业重新分发时，应在分发前完成同样的校验。
 

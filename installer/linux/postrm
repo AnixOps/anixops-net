@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+case "$1" in
+    remove)
+        deb-systemd-helper mask anixops-netd.service
+        if [ -d /run/systemd/system ]; then
+            systemctl --system daemon-reload
+        fi
+        ;;
+    purge)
+        deb-systemd-helper purge anixops-netd.service
+        deb-systemd-helper unmask anixops-netd.service
+        ;;
+esac
