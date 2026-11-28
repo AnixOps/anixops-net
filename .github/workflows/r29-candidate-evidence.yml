@@ -1,0 +1,60 @@
+name: Net 1.1 Core candidate evidence
+
+on:
+  push:
+    branches: [kalijerry/net-11-r29-candidate-evidence]
+
+permissions:
+  contents: read
+
+jobs:
+  mesh:
+    name: Linux client (${{ matrix.core }}, ${{ matrix.gate }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        core: [default, candidate]
+        gate: [closed, preview]
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify Net source and create temporary Core pin
+        shell: bash
+        env:
+          ROW: ${{ matrix.core }}
+        run: |
+          set -euxo pipefail
+          net_sha=c7e62db689d320817aeffe4bef5e13bc5702daa5
+          default=ef52978586ce43e8c5a7376f987eb435650d9019
+          candidate=ff2eea573db82de904fa32e0669b290b665a723c
+          git diff --name-only "$net_sha" HEAD | sort > "$RUNNER_TEMP/evidence-files"
+          diff -u <(printf '%s\n' .github/workflows/r29-candidate-evidence.yml crates/client-core/examples/mesh_candidate_acceptance.rs) "$RUNNER_TEMP/evidence-files"
+          core_sha=$default
+          if [[ "$ROW" == candidate ]]; then
+            core_sha=$candidate
+            sed -i "s/$default/$candidate/g" Cargo.toml Cargo.lock
+          fi
+          test "$(sed -nE 's/.*networkcore_anixops", rev = "([0-9a-f]+)".*/\1/p' Cargo.toml | sort -u)" = "$core_sha"
+          test "$(sed -nE 's/^source = "git\+https:\/\/github.com\/AnixOps\/networkcore_anixops\?rev=([0-9a-f]+)#[0-9a-f]+"$/\1/p' Cargo.lock | sort -u)" = "$core_sha"
+          echo "Net $net_sha Core $core_sha"
+
+      - name: Verify legacy configuration, engine, local connection and view contracts
+        shell: bash
+        env:
+          GATE: ${{ matrix.gate }}
+        run: |
+          set -euxo pipefail
+          unset ANIXOPS_MESH_PREVIEW ANIXOPS_MESH04_PREVIEW
+          if [[ "$GATE" == preview ]]; then export ANIXOPS_MESH_PREVIEW=1; fi
+          rustup toolchain install stable --profile minimal
+          cargo +stable test --locked -p client-core --lib backend::mesh::tests
+          cargo +stable test --locked -p client-view
+          cargo +stable run --locked -p client-core --example mesh_candidate_acceptance
