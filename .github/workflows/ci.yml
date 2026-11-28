@@ -958,6 +958,11 @@ jobs:
         shell: bash
         run: bash .github/scripts/verify-ios-package-manifest.sh source
 
+      # ios-testflight.yml runs the gate on macOS, whose bash is 3.2; this keeps the script working there.
+      - name: Mesh release gate runs with the macOS bash
+        shell: bash
+        run: /bin/bash .github/scripts/mesh-release-gate.sh
+
       - name: Test
         shell: bash
         working-directory: apps/ios
