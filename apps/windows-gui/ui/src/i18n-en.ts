@@ -1175,6 +1175,8 @@ export const english: Record<string, string> = {
   "{from}至{to}已改经{via}：直连链路延迟 {latency} ms。": "{from} to {to} now routed via {via}: direct link latency {latency} ms.",
   "{from}至{to}已改经{via}：直连链路延迟过高。": "{from} to {to} now routed via {via}: direct link latency too high.",
   "{count} 台成员不可达：{names}。": "{count} members unreachable: {names}.",
+  "{count} 台成员的地址未受管，地址可能变化。": "Unmanaged member addresses: {count}. These addresses may change.",
+  "组网有提示": "Mesh has notices",
   "名称须为 1–64 个字符，不含斜杠。": "The name must be 1–64 characters without slashes.",
   "缺少密钥。": "Secret is missing.",
   "缺少对端地址。": "Peer address is missing.",

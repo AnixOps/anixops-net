@@ -386,11 +386,7 @@ fn marks(member: &Value) -> Vec<&'static str> {
     {
         marks.push("duplicate");
     }
-    let infrastructure = matches!(
-        text(member, "role"),
-        "border" | "gateway" | "host" | "server"
-    );
-    if infrastructure && member.get("addressManaged").and_then(Value::as_bool) == Some(false) {
+    if has_unmanaged_address(member) {
         marks.push("unmanaged");
     }
     if member.get("bridgesExternal").and_then(Value::as_bool) == Some(true) {
@@ -402,6 +398,13 @@ fn marks(member: &Value) -> Vec<&'static str> {
         _ => {}
     }
     marks
+}
+
+fn has_unmanaged_address(member: &Value) -> bool {
+    matches!(
+        text(member, "role"),
+        "border" | "gateway" | "host" | "server"
+    ) && member["addressManaged"].as_bool() == Some(false)
 }
 
 fn compare_members(a: &Value, b: &Value, sort: &str) -> Ordering {
@@ -1148,7 +1151,7 @@ pub fn paths(status: &Value) -> Value {
 }
 
 /// The banners of the page, in the order of `mesh-ui.md` (提示): a join failure, fallen-back custom
-/// paths, cross-region detours, unreachable members, then the region ones: a refused change request
+/// paths, cross-region detours, unreachable members, unmanaged addresses, then a refused change request
 /// (`mesh.notice.region_rejected`, the only one of them with `notify`), a suggested move
 /// (`mesh.notice.region_suggestion`, action `request_region`, not while a request is pending), a region that
 /// is down (`mesh.notice.link_down`) and an unreachable host group (`mesh.notice.host_group_unreachable`). Each: `{ id, key, values, action, notify }`.
@@ -1307,6 +1310,19 @@ pub fn notices(status: &Value) -> Value {
                 false,
             );
         }
+    }
+    let unmanaged = members
+        .iter()
+        .filter(|member| has_unmanaged_address(member))
+        .count();
+    if unmanaged > 0 {
+        push(
+            "mesh.notice.address_unmanaged",
+            "address_unmanaged".into(),
+            vec![json!(unmanaged)],
+            None,
+            false,
+        );
     }
     // Region notices (`mesh-ui.md`, 提示): a refused change request, a suggested move, then another
     // region that cannot be reached.

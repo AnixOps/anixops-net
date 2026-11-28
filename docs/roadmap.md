@@ -10,3 +10,4 @@
 - 第 5 节：客户端 1.3（自定义路径、平台对齐项）。
 
 组网界面的设计与需求见 [mesh-ui.md](mesh-ui.md) 与 [mesh-requirements.md](mesh-requirements.md)，各平台差异见 [platform-parity.md](platform-parity.md)。
+客户端 1.1 的自动检查和真机步骤见[组网验收](mesh-1.1-acceptance.md)。

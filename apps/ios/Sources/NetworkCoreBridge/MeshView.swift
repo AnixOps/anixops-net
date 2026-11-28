@@ -292,8 +292,7 @@ public enum MeshView {
     static func marks(_ member: [String: Any]) -> [String] {
         var marks: [String] = []
         if !list(member, "duplicateOf").isEmpty || !list(member, "duplicateNetworks").isEmpty { marks.append("duplicate") }
-        let infrastructure = ["border", "gateway", "host", "server"].contains(text(member, "role"))
-        if infrastructure && bool(member, "addressManaged") == false { marks.append("unmanaged") }
+        if hasUnmanagedAddress(member) { marks.append("unmanaged") }
         if bool(member, "bridgesExternal") == true { marks.append("external_bridge") }
         switch text(member, "pathState") {
         case "fallback": marks.append("fallback")
@@ -301,6 +300,10 @@ public enum MeshView {
         default: break
         }
         return marks
+    }
+
+    public static func hasUnmanagedAddress(_ member: Any?) -> Bool {
+        ["border", "gateway", "host", "server"].contains(text(member, "role")) && bool(member, "addressManaged") == false
     }
 
     static func ascending(_ a: [String: Any], _ b: [String: Any], sort: String) -> ComparisonResult {
@@ -895,6 +898,10 @@ public enum MeshView {
             if !names.isEmpty {
                 push("mesh.notice.partial", "partial", [names.count, names], nil, false)
             }
+        }
+        let unmanaged = members.filter { hasUnmanagedAddress($0) }.count
+        if unmanaged > 0 {
+            push("mesh.notice.address_unmanaged", "address_unmanaged", [unmanaged], nil, false)
         }
         // Region notices (`mesh-ui.md`, 提示): a refused change request, a suggested move, then another region that
         // cannot be reached.

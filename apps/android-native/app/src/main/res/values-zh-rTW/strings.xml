@@ -997,6 +997,7 @@
     <plurals name="mesh_joining_peers">
         <item quantity="other">正在加入：已連線 %1$d 個對端</item>
     </plurals>
+    <string name="mesh_notice_address_unmanaged">%1$d 台成員的位址未受管，位址可能變更。</string>
     <plurals name="mesh_notice_partial">
         <item quantity="other">%1$d 台成員無法連線：%2$s。</item>
     </plurals>

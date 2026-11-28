@@ -1036,7 +1036,7 @@ struct MeshMemberDetail: View {
     private func notes(_ member: MeshObject, status: MeshObject) -> some View {
         let duplicates = member.strings("duplicateOf")
         let networks = MeshView.duplicateNetworks(status.raw, member.raw)
-        let unmanaged = member.raw["addressManaged"] as? Bool == false
+        let unmanaged = MeshView.hasUnmanagedAddress(member.raw)
             && ["border", "gateway", "host", "server"].contains(member.string("role") ?? "")
         if !duplicates.isEmpty || !networks.isEmpty || unmanaged {
             Section {

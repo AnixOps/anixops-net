@@ -1001,6 +1001,7 @@
     <plurals name="mesh_joining_peers">
         <item quantity="other">正在加入：已连接 %1$d 个对端</item>
     </plurals>
+    <string name="mesh_notice_address_unmanaged">%1$d 台成员的地址未受管，地址可能变化。</string>
     <plurals name="mesh_notice_partial">
         <item quantity="other">%1$d 台成员不可达：%2$s。</item>
     </plurals>
