@@ -221,13 +221,29 @@ public struct TunnelStartSecrets: Codable, Equatable {
         self = decoded
     }
 
-    /// Writes the copy atomically with mode 0600.
+    /// Writes the copy atomically with mode 0600 from creation.
     public func save(to url: URL) throws {
+        let dir = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(), withIntermediateDirectories: true
+            at: dir,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
         )
-        try JSONEncoder().encode(self).write(to: url, options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        let data = try JSONEncoder().encode(self)
+        let tmp = dir.appendingPathComponent(".\(url.lastPathComponent).tmp.\(UUID().uuidString)")
+        guard FileManager.default.createFile(
+            atPath: tmp.path,
+            contents: data,
+            attributes: [.posixPermissions: 0o600]
+        ) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        do {
+            _ = try FileManager.default.replaceItemAt(url, withItemAt: tmp)
+        } catch {
+            try? FileManager.default.removeItem(at: tmp)
+            throw error
+        }
     }
 
     /// The saved copy, or nil when there is none or it does not parse.
