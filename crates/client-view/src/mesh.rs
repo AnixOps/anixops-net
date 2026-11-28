@@ -140,32 +140,59 @@ fn all_members(status: &Value) -> Vec<Value> {
         members.push(own);
     }
     members.extend(list(status, "members").iter().cloned());
-    // Members whose name other networks answer too carry the display names of those networks (R28).
     for member in &mut members {
-        let networks = duplicate_networks(status, member);
-        if let (false, Some(object)) = (networks.is_empty(), member.as_object_mut()) {
-            object.insert("duplicateNetworks".into(), json!(networks));
-        }
+        project_member_name(status, member);
     }
     members
 }
 
-/// The other networks whose records the tunnel merges into the answer for this member's name: the
-/// `duplicateNetworks` of the top-level `names[]` entry for the member (ASCII case-insensitive), as network
-/// names where `networks[]` has them, else ids. Empty when `names` is absent (older kernels).
-fn duplicate_networks(status: &Value, member: &Value) -> Vec<String> {
-    let mut shown: Vec<String> = Vec::new();
-    let Some(key) = name_key(status, member) else {
-        return shown;
-    };
-    for entry in list(status, "names") {
-        if !text(entry, "name").eq_ignore_ascii_case(&key) {
-            continue;
-        }
-        for id in list(entry, "duplicateNetworks")
-            .iter()
-            .filter_map(Value::as_str)
+/// Core's `names[]` belongs to the selected `network`; `networks[]` only labels other network IDs.
+/// A fallback identity needs an answerable member-source record with the same host label and virtual
+/// address. Panel aliases, address matches alone, and multiple possible keys cannot supply a domain.
+fn project_member_name(status: &Value, member: &mut Value) {
+    let names = list(status, "names");
+    let network = &status["network"];
+    let suffix = text(network, "dnsSuffix").trim_matches('.');
+    let explicit = opt_text(member, "domain");
+    let mut domain = None;
+    let mut key = explicit.and_then(|domain| name_key(domain, suffix));
+    if explicit.is_none()
+        && opt_text(network, "id").is_some()
+        && network["dnsEnabled"].as_bool() != Some(false)
+        && suffix.contains('.')
+        && suffix.split('.').all(dns_label)
+        && dns_label(text(member, "name"))
+    {
+        let host = text(member, "name");
+        let address = bare_address(text(member, "address")).parse::<IpAddr>().ok();
+        let mut keys = names.iter().filter_map(|entry| {
+            let name = text(entry, "name");
+            (text(entry, "source") == "member"
+                && entry["answerable"].as_bool() == Some(true)
+                && name.split('.').all(dns_label)
+                && name.split('.').count() <= 2
+                && host.eq_ignore_ascii_case(name.split('.').next().unwrap_or_default())
+                && address.is_some_and(|address| name_addresses(entry).any(|ip| ip == address)))
+            .then_some(name)
+        });
+        if let Some(first) = keys
+            .next()
+            .filter(|first| keys.all(|key| key.eq_ignore_ascii_case(first)))
         {
+            domain = Some(format!("{first}.{suffix}"));
+            key = Some(first.to_ascii_lowercase());
+        }
+    }
+    let Some(key) = key else { return };
+    let entries = names
+        .iter()
+        .filter(|entry| text(entry, "name").eq_ignore_ascii_case(&key));
+    let mut in_network = false;
+    let mut shown: Vec<String> = Vec::new();
+    for entry in entries.clone() {
+        let networks = list(entry, "duplicateNetworks");
+        in_network |= networks.is_empty() && entry["duplicate"].as_bool() == Some(true);
+        for id in networks.iter().filter_map(Value::as_str) {
             let label = list(status, "networks")
                 .iter()
                 .find(|network| text(network, "id") == id)
@@ -176,28 +203,64 @@ fn duplicate_networks(status: &Value, member: &Value) -> Vec<String> {
             }
         }
     }
-    shown
+    // This describes the records, not how a short query resolves. RC.1 does not expose the effective
+    // local DNS region, so the client cannot tell whether a local answer takes precedence.
+    let across_regions = key.split_once('.').is_some_and(|(host, _)| {
+        entries
+            .filter(|entry| entry["answerable"].as_bool() == Some(true))
+            .any(|entry| {
+                names.iter().any(|other| {
+                    let other_key = text(other, "name");
+                    !other_key.eq_ignore_ascii_case(&key)
+                        && other_key.split_once('.').is_some_and(|(label, region)| {
+                            label.eq_ignore_ascii_case(host) && dns_label(region)
+                        })
+                        && other["answerable"].as_bool() == Some(true)
+                        && name_addresses(entry)
+                            .any(|ip| name_addresses(other).any(|other_ip| ip != other_ip))
+                })
+            })
+    });
+    if let Some(object) = member.as_object_mut() {
+        if let Some(domain) = domain {
+            object.insert("domain".into(), json!(domain));
+        }
+        if in_network {
+            object.insert("duplicateInNetwork".into(), json!(true));
+        }
+        if across_regions {
+            object.insert("duplicateAcrossRegions".into(), json!(true));
+        }
+        if !shown.is_empty() {
+            object.insert("duplicateNetworks".into(), json!(shown));
+        }
+    }
 }
 
-/// The member's entry in `names[]`: its domain without the network's suffix, `名.地区` (lowercase). The
-/// first two labels when the domain does not end in the suffix; none without a domain.
-fn name_key(status: &Value, member: &Value) -> Option<String> {
-    let domain = text(member, "domain")
-        .trim_end_matches('.')
-        .to_ascii_lowercase();
-    if domain.is_empty() {
-        return None;
-    }
-    let suffix = status
-        .get("network")
-        .map(|network| text(network, "dnsSuffix"))
-        .unwrap_or("")
-        .trim_matches('.')
-        .to_ascii_lowercase();
+fn dns_label(label: &str) -> bool {
+    !label.is_empty()
+        && label.len() <= 63
+        && !label.starts_with('-')
+        && !label.ends_with('-')
+        && label
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+}
+
+fn name_addresses(entry: &Value) -> impl Iterator<Item = IpAddr> + '_ {
+    list(entry, "addresses")
+        .iter()
+        .filter_map(|ip| ip.as_str()?.parse().ok())
+}
+
+/// Where an older snapshot provides an explicit domain, retain its first two labels when the suffix is absent.
+fn name_key(domain: &str, suffix: &str) -> Option<String> {
+    let domain = domain.trim_end_matches('.').to_ascii_lowercase();
     if !suffix.is_empty() {
-        if let Some(key) = domain.strip_suffix(&format!(".{suffix}")) {
+        if let Some(key) = domain.strip_suffix(&format!(".{}", suffix.to_ascii_lowercase())) {
             return Some(key.to_owned());
         }
+        return None;
     }
     let labels: Vec<&str> = domain.split('.').collect();
     (labels.len() >= 2).then(|| labels[..2].join("."))
@@ -310,7 +373,11 @@ fn passes(member: &Value, filter: &str) -> bool {
 /// addresses of an external network), `fallback` (its custom path fell back), `first_hop_only`.
 fn marks(member: &Value) -> Vec<&'static str> {
     let mut marks = Vec::new();
-    if !list(member, "duplicateOf").is_empty() || !list(member, "duplicateNetworks").is_empty() {
+    if !list(member, "duplicateOf").is_empty()
+        || !list(member, "duplicateNetworks").is_empty()
+        || member["duplicateInNetwork"].as_bool() == Some(true)
+        || member["duplicateAcrossRegions"].as_bool() == Some(true)
+    {
         marks.push("duplicate");
     }
     let infrastructure = matches!(
@@ -425,6 +492,11 @@ fn member_row(
         }
         if !networks.is_empty() {
             object.insert("duplicateNetworks".into(), json!(networks));
+        }
+        for flag in ["duplicateInNetwork", "duplicateAcrossRegions"] {
+            if member[flag].as_bool() == Some(true) {
+                object.insert(flag.into(), json!(true));
+            }
         }
     }
     Some(row)
@@ -848,12 +920,22 @@ pub fn members(
             }))
         })
         .collect();
-    json!({
+    let mut answer = json!({
         "groupBy": group_by,
         "groups": groups,
         "total": everyone.len(),
         "matched": matched_total,
-    })
+    });
+    if opt_text(&status["self"], "domain").is_none() {
+        if let Some(domain) = everyone
+            .first()
+            .filter(|member| member["self"].as_bool() == Some(true))
+            .and_then(|member| opt_text(member, "domain"))
+        {
+            answer["ownDomain"] = json!(domain);
+        }
+    }
+    answer
 }
 
 /// The subnet list. Each row: `{ cidr, display, kind, label, hostGroup, bridge, vms, region, regionName,
@@ -1518,9 +1600,10 @@ mod tests {
         assert_eq!(nas["marks"], json!(["duplicate"]));
         assert_eq!(nas["duplicateNetworks"], json!(["Home"]));
         assert!(nas.get("duplicateInRegion").is_none());
-        // `duplicate: true` with no other network is the same-network case, which `duplicateOf` carries.
+        // Core also reports duplicate records without a `duplicateOf` member list.
         let tv = member_row(&everyone[2], &[], "", None).unwrap();
-        assert_eq!(tv["marks"], json!([]));
+        assert_eq!(tv["marks"], json!(["duplicate"]));
+        assert_eq!(tv["duplicateInNetwork"], true);
         assert!(tv.get("duplicateNetworks").is_none());
         // The same host name in another region is another entry (`nas.par`), not `nas.lon`.
         let other_region = member_row(&everyone[3], &[], "", None).unwrap();
@@ -1528,6 +1611,56 @@ mod tests {
         // Without a domain the member has no entry to match.
         let no_domain = member_row(&everyone[4], &[], "", None).unwrap();
         assert_eq!(no_domain["marks"], json!([]));
+    }
+
+    #[test]
+    fn accepts_only_an_unambiguous_answerable_member_name_in_the_selected_network() {
+        let status = json!({
+            "network": { "id": "office", "dnsEnabled": true, "dnsSuffix": "mesh.internal" },
+            "self": { "id": "local", "name": "LOCAL", "address": "10.144.0.1" },
+            "members": [
+                { "id": "printer", "name": "Printer", "address": "10.144.0.2/24" },
+                { "id": "alias", "name": "Alias", "address": "10.144.0.3" },
+                { "id": "other", "name": "Other", "address": "10.144.0.4" },
+                { "id": "ambiguous", "name": "Ambiguous", "address": "10.144.0.5" },
+                { "id": "partial", "name": "Partial", "address": "10.144.0.6" },
+            ],
+            "names": [
+                { "name": "local.lon", "source": "member", "addresses": ["10.144.0.1"], "answerable": true },
+                { "name": "printer.lon", "source": "member", "addresses": ["10.144.0.2"], "answerable": true,
+                    "duplicate": true, "duplicateNetworks": ["lab"] },
+                { "name": "printer.par", "source": "panel", "addresses": ["10.144.0.8"], "answerable": true },
+                { "name": "alias.lon", "source": "panel", "addresses": ["10.144.0.3"], "answerable": true },
+                { "name": "somebody.lon", "source": "member", "addresses": ["10.144.0.4"], "answerable": true },
+                { "name": "ambiguous.lon", "source": "member", "addresses": ["10.144.0.5"], "answerable": true },
+                { "name": "ambiguous.par", "source": "member", "addresses": ["10.144.0.5"], "answerable": true },
+                { "name": "partial.lon", "source": "member", "addresses": ["10.144.0.6"], "answerable": false },
+            ],
+            "networks": [{ "id": "lab", "name": "Lab" }],
+        });
+        let view = members(&status, "none", "all", "name", "", &[]);
+        let rows = view["groups"][0]["rows"].as_array().unwrap();
+        let row = |id: &str| rows.iter().find(|row| row["id"] == id).unwrap();
+        assert_eq!(view["ownDomain"], "local.lon.mesh.internal");
+        assert_eq!(row("printer")["domain"], "printer.lon.mesh.internal");
+        assert_eq!(row("printer")["duplicateAcrossRegions"], true);
+        assert_eq!(row("printer")["duplicateNetworks"], json!(["Lab"]));
+        assert!(row("printer").get("duplicateInNetwork").is_none());
+        for id in ["alias", "other", "ambiguous", "partial"] {
+            assert!(row(id)["domain"].is_null());
+            assert!(row(id)["address"].is_string());
+            assert_eq!(row(id)["marks"], json!([]));
+        }
+        let view = members(
+            &status,
+            "none",
+            "all",
+            "name",
+            "printer.lon.mesh.internal",
+            &[],
+        );
+        assert_eq!(view["matched"], 1);
+        assert_eq!(view["ownDomain"], "local.lon.mesh.internal");
     }
 
     #[test]

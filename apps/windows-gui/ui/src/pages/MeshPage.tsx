@@ -395,6 +395,9 @@ function MemberRow({ view, row, showRegion, selected, onSelect }: {
 }
 
 function MemberDetail({ view, row }: { view: MeshView; row: MeshMemberRow }) {
+  const otherNetworks = row.duplicateNetworks ?? [];
+  const legacyDuplicate = (row.marks ?? []).includes("duplicate") &&
+    !row.duplicateInNetwork && !row.duplicateAcrossRegions && otherNetworks.length === 0;
   return (
     <Card title={row.name}>
       <Row label={t("状态")} value={row.state === "unreachable" ? t("不可达") : connectionLabel(row.connection, row.hops)} />
@@ -402,9 +405,11 @@ function MemberDetail({ view, row }: { view: MeshView; row: MeshMemberRow }) {
       {row.address && <Row label={t("虚拟地址")} value={<span className="mono">{row.address}</span>}><CopyButton label={t("拷贝虚拟地址")} text={row.address} /></Row>}
       {row.region && <Row label={t("地区")} value={regionName(view.head, row.region)} />}
       {roleLabel(row.role) && <Row label={t("角色")} value={roleLabel(row.role)} />}
-      {(row.duplicateInRegion || ((row.marks ?? []).includes("duplicate") && (row.duplicateNetworks ?? []).length === 0)) && <Row label={t("重名")} hint={t("本地区有同名成员。")} />}
-      {(row.duplicateNetworks ?? []).length > 0 && (
-        <Row label={t("重名")} hint={t("网络 {networks} 也应答这个名字，域名解析会返回全部地址。", { networks: (row.duplicateNetworks ?? []).join(t("、")) })} />
+      {(row.duplicateInRegion || legacyDuplicate) && <Row label={t("重名")} hint={t("本地区有同名成员。")} />}
+      {row.duplicateInNetwork && !row.duplicateInRegion && <Row label={t("重名")} hint={t("此网络有同名记录。")} />}
+      {row.duplicateAcrossRegions && <Row label={t("重名")} hint={t("此网络在多个地区有同名记录。")} />}
+      {otherNetworks.length > 0 && (
+        <Row label={t("重名")} hint={t("网络 {networks} 也应答这个名字，域名解析会返回全部地址。", { networks: otherNetworks.join(t("、")) })} />
       )}
       {(row.marks ?? []).includes("unmanaged") && <Row label={t("地址未受管")} hint={t("地址未受管：虚拟地址可能变化，内网域名可能随之失效。")} />}
     </Card>
@@ -699,12 +704,13 @@ function Self({ view, network, busy, perform }: {
   const subnets = own.advertised !== undefined || own.suggestedSubnets !== undefined;
   const forwarding = forwardingLabel(own.ipForwarding);
   const listen = listenText(own.listen);
+  const domain = own.domain || view.members.ownDomain;
   return (
     <>
       <Card title={t("身份")}>
         <Row label={t("名称")} value={own.name} />
         {own.address && <Row label={t("虚拟地址")} value={<span className="mono">{own.address}</span>}><CopyButton label={t("拷贝虚拟地址")} text={own.address} /></Row>}
-        {own.domain && <Row label={t("内网域名")} value={<span className="mono">{own.domain}</span>}><CopyButton label={t("拷贝内网域名")} text={own.domain} /></Row>}
+        {domain && <Row label={t("内网域名")} value={<span className="mono">{domain}</span>}><CopyButton label={t("拷贝内网域名")} text={domain} /></Row>}
         {regionText && <Row label={t("地区")} value={regionText} />}
         {own.region && others.length > 0 && own.regionState !== "pending" && (
           <Row label={t("变更地区")} hint={t("变更需网络管理者批准。")}>
