@@ -981,7 +981,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # The same Rust toolchain as the "Windows build, test and MSI" job, for the service.
+      # The same Rust toolchain as the "Windows Rust workspace" job, for the service.
       - name: Setup Windows C toolchain
         uses: msys2/setup-msys2@3c51bf698df1e37b2261f53cb67797b97761185c # v2.34.0
         id: msys2
@@ -1013,9 +1013,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          # The same pinned toolchain as the Windows job.
-          rustup toolchain install 1.99.0 --profile minimal
-          rustup default 1.99.0
+          rustup toolchain install stable --profile minimal
+          rustup default stable
           rustup target add x86_64-pc-windows-gnu
 
       - name: Restore Rust build cache
@@ -1214,7 +1213,7 @@ jobs:
           cargo clippy --locked -p anixops-net-native --features gui --all-targets -- -D warnings
           cargo test --locked -p anixops-net-native --features gui
           cargo build --locked -p anixops-net-native --features gui --release
-          test -x target/release/anixops-net-preview
+          test -x target/release/anixops-net
 
       # The window links no engine: it talks to the daemon. Keeps that from slipping back in.
       - name: The window has no engine in it
@@ -1242,7 +1241,7 @@ jobs:
         run: |
           set -euo pipefail
           xvfb-run -a --server-args="-screen 0 2400x1600x24" dbus-run-session -- \
-            .github/scripts/linux-native-screenshots.sh target/release/anixops-net-preview \
+            .github/scripts/linux-native-screenshots.sh target/release/anixops-net \
             "${RUNNER_TEMP}/linux-native-screenshots"
 
       # The last part runs the window against the real daemon: not running, found, connected and disconnected
@@ -1261,7 +1260,7 @@ jobs:
             sudo install -d -m 0700 -o "${uid}" "/run/user/${uid}"
           fi
           xvfb-run -a --server-args="-screen 0 1280x800x24" dbus-run-session -- \
-            python3 .github/scripts/linux-native-a11y.py target/release/anixops-net-preview \
+            python3 .github/scripts/linux-native-a11y.py target/release/anixops-net \
             crates/client-strings/catalogue.json target/release/anixops-netd \
             "${RUNNER_TEMP}/linux-native-screenshots"
 

@@ -1,4 +1,4 @@
-//! `anixops-net-preview`: the native Linux window.
+//! `anixops-net`: the native Linux window.
 
 #[cfg(target_os = "linux")]
 fn main() -> std::process::ExitCode {

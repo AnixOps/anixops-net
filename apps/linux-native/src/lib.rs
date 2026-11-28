@@ -36,4 +36,4 @@ pub mod window;
 pub use client_strings::Language;
 
 /// The application id: the name on the session bus, the desktop file and the window class.
-pub const APP_ID: &str = "io.anixops.net.preview";
+pub const APP_ID: &str = "io.anixops.net";

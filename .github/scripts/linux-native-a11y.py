@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Drives the native Linux window through AT-SPI, the way a screen reader sees it.
 
-    xvfb-run -a dbus-run-session -- python3 linux-native-a11y.py <anixops-net-preview> <catalogue.json> \
+    xvfb-run -a dbus-run-session -- python3 linux-native-a11y.py <anixops-net> <catalogue.json> \
         [<anixops-netd> [<screenshot directory>]]
 
 For every language the window is started for real and checked from the outside:
@@ -1306,7 +1306,7 @@ def check_core(binary: str, daemon: str, wording: dict, shots: str | None) -> No
 
 def main() -> None:
     if not 3 <= len(sys.argv) <= 5:
-        fail("usage: linux-native-a11y.py <anixops-net-preview> <catalogue.json> [<anixops-netd> [<screenshots>]]")
+        fail("usage: linux-native-a11y.py <anixops-net> <catalogue.json> [<anixops-netd> [<screenshots>]]")
     binary, catalogue = sys.argv[1:3]
     daemon = sys.argv[3] if len(sys.argv) > 3 else None
     shots = sys.argv[4] if len(sys.argv) > 4 else None

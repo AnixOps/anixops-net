@@ -30,11 +30,6 @@
                     x:Name="AppName"
                     VerticalAlignment="Center"
                     Style="{StaticResource CaptionTextBlockStyle}" />
-                <TextBlock
-                    x:Name="AppStage"
-                    VerticalAlignment="Center"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Style="{StaticResource CaptionTextBlockStyle}" />
                 <!-- Whether the core service answers. One dot per state, so each keeps its theme colour. -->
                 <Grid
                     Width="8"
