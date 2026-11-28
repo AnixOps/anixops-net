@@ -198,7 +198,7 @@ helpers='(prepared_start|start_gated|through_proxy_gated|runs_mesh|joined_into|s
 # The writers and how many calls of each the non-test code has, in every file together (a call is the name followed by
 # `(`, its own `fn`/`func` line not counted): exactly, not at least.
 writers=(
-    "allow_mesh_text|5"
+    "allow_mesh_text|3"
     "set_allow_mesh|4"
     "prepared_start|2"
     "start_envelope|1"

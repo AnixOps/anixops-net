@@ -276,7 +276,7 @@ macOS / iOS 用 XCUITest 的 `performAccessibilityAudit`（对比度、文字被
 
 界面细节靠截图对比把关，不靠人记得去看。
 
-- **Windows 和 Linux**：原生 CI 作业上传各自的界面截图。审查 PR 时用截图核对布局、主题和原生交互，并在 PR 里说明变化。
+- **Windows 和 Linux**：原生 CI 作业上传各自的界面截图。评审 PR 时用截图核对布局、主题和原生交互，并在 PR 里说明变化。
 - **macOS**：CI 的 “macOS screenshots, UI tests and accessibility audit” 用 “iOS and macOS Xcode build” 构建好的调试版 App、演示数据逐页截图（`.github/scripts/mac-screenshots.sh`）。main 上每次改到 Apple 端的提交都会把截图存成 `mac-screenshots-<sha>`（保留 30 天）；PR 上拿自己的截图和基线提交往前最近的一份 main 截图逐张比对（`screenshot-compare.sh`），有差异时在 PR 描述中用 `界面变化：` 声明确认的截图，截图名加 `mac-`：
 
   ```
