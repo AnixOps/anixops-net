@@ -1527,7 +1527,7 @@ jobs:
           | 平台 | 文件 | 说明 |
           | --- | --- | --- |
           | Windows 10/11 | \`anixops-net-${VERSION}-windows-x64.msi\` | 安装版（推荐） |
-          | Windows 10/11 | \`anixops-net-${VERSION}-windows-x64-portable.zip\` | 便携版，解压后按 README 启动核心与界面 |
+          | Windows 10/11 | \`anixops-net-${VERSION}-windows-x64-portable.zip\` | 便携版，按 README 以管理员权限启动核心，再打开界面 |
           | Debian / Ubuntu | \`anixops-net-${VERSION}-linux-amd64.deb\` | \`sudo apt install ./<文件名>\` |
           | 其他 Linux | \`anixops-net-${VERSION}-linux-x64.tar.gz\` | 解压后按 INSTALL.md 配置服务，再运行 \`bin/anixops-net\` |
           | 安卓 | \`${ANDROID_APK}\` | ${android_note} |
