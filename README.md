@@ -66,8 +66,8 @@ AnixOps Net 把这两件事放进同一个 App：
 | 平台 | 安装包 | 说明 |
 |---|---|---|
 | Windows 10 / 11 | `.msi`（推荐）或便携版 `.zip` | 安装包未做代码签名。安装前先按下方步骤核对摘要和来源证明，通过后再在 SmartScreen 提示中选择“更多信息 → 仍要运行”。 |
-| Debian / Ubuntu | `.deb` | `sudo apt install ./<文件名>`，需要 WebKitGTK 4.1。 |
-| 其他 Linux | `.tar.gz` | 解压后运行 `bin/anixops-net`，需要 WebKitGTK 4.1。 |
+| Debian / Ubuntu | `.deb` | `sudo apt install ./<文件名>`，系统依赖见对应版本的发布说明。 |
+| 其他 Linux | `.tar.gz` | 按压缩包内的 `INSTALL.md` 安装并启动。 |
 | 安卓 8.0 及以上 | `.apk`（arm64） | 下载后直接安装。 |
 
 每个版本都附 `SHA256SUMS`（`sha256sum -c SHA256SUMS` 校验；Windows 用 `Get-FileHash <文件> -Algorithm SHA256`

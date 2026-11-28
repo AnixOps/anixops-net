@@ -36,4 +36,7 @@ the client's root to the user's own certificate store (Windows asks to confirm),
 thumbprint in `trusted-roots.txt` in its data folder. On removal `anixops-net-service --purge` takes the
 noted roots out of the signed-in users' stores again.
 
-Not in the package yet: a licence page and an icon. The package is not signed in CI.
+The release workflow builds this MSI and a portable ZIP, with checksums and GitHub build attestations.
+Both include the licence and third-party notices. The MSI uses the AnixOps Net app icon.
+The portable ZIP runs the core in the foreground as described in `PORTABLE-README.txt`.
+The MSI ships without Authenticode signing.

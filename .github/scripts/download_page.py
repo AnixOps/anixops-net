@@ -31,9 +31,9 @@ import sys
 # key, asset name suffix, platform, label, note
 ASSETS = [
     ("windows", "-windows-x64.msi", "Windows 10/11", "安装版（推荐）", "MSI 安装包，未做代码签名。安装前先核对 SHA256SUMS 与来源证明，通过后再在 SmartScreen 提示中选择「仍要运行」。"),
-    ("windows-portable", "-windows-x64-portable.zip", "Windows 10/11", "便携版", "解压即用。"),
-    ("linux-deb", "-linux-amd64.deb", "Debian / Ubuntu", ".deb 安装包", "sudo apt install ./<文件名>，需要 WebKitGTK 4.1。"),
-    ("linux", "-linux-x64.tar.gz", "其他 Linux", "tar.gz", "解压后运行 bin/anixops-net，需要 WebKitGTK 4.1。"),
+    ("windows-portable", "-windows-x64-portable.zip", "Windows 10/11", "便携版", "解压后按包内 README 启动。"),
+    ("linux-deb", "-linux-amd64.deb", "Debian / Ubuntu", ".deb 安装包", "sudo apt install ./<文件名>，系统依赖见发布说明。"),
+    ("linux", "-linux-x64.tar.gz", "其他 Linux", "tar.gz", "按包内 INSTALL.md 安装并启动。"),
     ("android", "-android-arm64.apk", "安卓 8.0+", "APK（arm64）", "下载后直接安装。"),
 ]
 

@@ -70,6 +70,7 @@ ICONS = {
     "apps/windows-gui/icons/icon.ico": "brand/products/net/icon.ico",
     "apps/windows-native/src/AnixOps.Net.App/Assets/AnixOpsNet.ico": "brand/products/net/icon.ico",
     "apps/linux-gui/icons/networkcore.png": "brand/products/net/icon-256.png",
+    "apps/linux-native/data/anixops-net.png": "brand/products/net/icon-256.png",
     "apps/android-native/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png": "brand/products/net/icon-256.png",
     # The in-app mark (BrandMark in SwiftUI): the AnixOps Net product icon.
     "apps/ios/Sources/NetworkCoreApp/Resources/Assets.xcassets/BrandMark.imageset/BrandMark.png": "brand/products/net/icon-512.png",

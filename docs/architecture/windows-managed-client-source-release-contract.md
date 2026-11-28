@@ -1,9 +1,10 @@
 # Windows Managed Client Source Release Contract
 
-This contract activates the first complete Windows desktop integration slice.
-The historical `v0.1.1-alpha.2` CLI-only ZIP contract remains in
-`windows-cli-artifact-source-release-contract.md`; it does not describe the
-current Windows package.
+This contract documents the Windows desktop packages for the v0.2.0 Tauri integration.
+The native release packages use WinUI 3, the Windows core service, and WiX 5.
+See [the native installer](../../installer/windows-native/README.md) for the current package layout.
+The v0.1.1-alpha.2 CLI-only ZIP is covered by
+`windows-cli-artifact-source-release-contract.md`.
 
 ```text
 windows-managed-client-source-release-contract=present
