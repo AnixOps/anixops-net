@@ -589,8 +589,7 @@ impl Shell {
 /// desktop's proxy settings); each change of the link comes back to the window as [`Show::Core`].
 fn link(socket: Option<String>, sender: &ComponentSender<Shell>) -> CoreLink {
     let desktop = Desktop::from_env();
-    let executable =
-        std::env::current_exe().unwrap_or_else(|_| PathBuf::from("anixops-net"));
+    let executable = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("anixops-net"));
     // No login entry while this is the preview: the window that starts after login is still the old one.
     let session = LocalSession::new(desktop, None, executable);
     // What the daemon tells the window without being asked (notifications) is shown once the pages are.
