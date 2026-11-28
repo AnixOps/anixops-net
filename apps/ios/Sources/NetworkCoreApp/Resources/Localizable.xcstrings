@@ -22137,6 +22137,22 @@
         }
       }
     },
+    "%lld 台成员的地址未受管，地址可能变化。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unmanaged member addresses: %lld. These addresses may change."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 台成員的位址未受管，位址可能變更。"
+          }
+        }
+      }
+    },
     "%lld 台成员不可达：%@。": {
       "localizations": {
         "en": {

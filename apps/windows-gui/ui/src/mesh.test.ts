@@ -87,6 +87,7 @@ describe("words", () => {
     expect(securityLabel(undefined)).toBeNull();
     expect(connectionLabel("relay", 2)).toBe("中转 2 跳");
     expect(noticeText({ id: "mesh.notice.partial", key: "partial", values: [2, ["a", "b"]] })).toBe("2 台成员不可达：a、b。");
+    expect(noticeText({ id: "mesh.notice.address_unmanaged", key: "address_unmanaged", values: [2] })).toBe("2 台成员的地址未受管，地址可能变化。");
     const port = { id: "mesh.notice.failure", key: "failure:port_in_use", values: ["11010"] };
     expect(noticeText(port)).toBe("无法启动组网：监听端口已被占用。");
     expect(noticeDetail(port)).toBe("11010");

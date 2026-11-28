@@ -75,6 +75,8 @@ nav { display: grid; gap: 1px; }
 .nav-item:hover { background: var(--fill-1); }
 .nav-item.active { font-weight: 600; background: var(--fill-2); }
 .nav-item.active .nav-count { color: var(--text); }
+.mesh-nav-status { position: relative; display: inline-flex; flex-shrink: 0; }
+.mesh-nav-status > .status-dot { position: absolute; top: 0; right: 0; }
 .nav-count { margin-left: auto; color: var(--text2); font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .sidebar-foot { margin-top: auto; padding: 10px 6px 4px 8px; border-top: 1px solid var(--hairline); }
 .sidebar-rates { display: flex; gap: 12px; margin-bottom: 8px; color: var(--text2); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }

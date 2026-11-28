@@ -831,6 +831,8 @@ export function noticeText(notice: MeshNotice): string {
       return t("已忽略内网域名后缀 {suffixes}：后缀须位于 internal 之下。", { suffixes: value(values, 0) });
     case "mesh.notice.local_dns_inbound_unprotected":
       return value(values, 0) === "busy" ? t("入站保护未生效：另一程序正在管理本机组网设置。") : t("入站保护未生效：组网成员可能访问本机其他服务。");
+    case "mesh.notice.address_unmanaged":
+      return t("{count} 台成员的地址未受管，地址可能变化。", { count: value(values, 0) });
     case "mesh.notice.partial": {
       const names = Array.isArray(values?.[1]) ? (values?.[1] as unknown[]).filter((name): name is string => typeof name === "string") : [];
       return t("{count} 台成员不可达：{names}。", { count: names.length, names: list(names) });

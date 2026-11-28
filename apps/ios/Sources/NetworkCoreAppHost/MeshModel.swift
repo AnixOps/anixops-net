@@ -486,6 +486,8 @@ enum MeshText {
                 return String(localized: "\(text(0))至\(text(1))已改经\(text(2))：直连链路延迟 \(latency) ms。")
             }
             return String(localized: "\(text(0))至\(text(1))已改经\(text(2))：直连链路延迟过高。")
+        case "mesh.notice.address_unmanaged":
+            return String(localized: "\(number(0) ?? 0) 台成员的地址未受管，地址可能变化。")
         case "mesh.notice.partial":
             let names = (values.count > 1 ? values[1] as? [String] : nil) ?? []
             let list = names.formatted(.list(type: .and))

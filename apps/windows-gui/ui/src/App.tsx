@@ -338,7 +338,13 @@ export function App() {
       aria-current={page === item ? "page" : undefined}
       onClick={() => setPage(item)}
     >
-      <Tile icon={icon} color={color} /><span>{t(label)}</span>
+      {item === "mesh" && mesh.view?.entry.attention ? (
+        <span className="mesh-nav-status">
+          <Tile icon={icon} color={color} /><StatusDot tone="warning" />
+          <span className="visually-hidden">{t("组网有提示")}</span>
+        </span>
+      ) : <Tile icon={icon} color={color} />}
+      <span>{t(label)}</span>
       {item === "proxies" && mode === "proxy" && nodes.length > 0 && <span className="nav-count">{nodes.length}</span>}
       {item === "activity" && <ActiveCount />}
     </button>

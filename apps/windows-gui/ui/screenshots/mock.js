@@ -178,7 +178,9 @@
     ] }),
     "view.mesh_paths": () => ({ policy: "latency", links: [{ from: "uk", fromName: "伦敦", to: "hk", toName: "香港", borders: ["lon-border", "hk-gateway"], latencyMs: 182, tone: "medium", loss: 0.01, state: "ok" }],
       custom: [{ id: "p1", targetKind: "subnet", target: "172.20.0.0/16", targetLabel: "172.20.0.0/16", advertiser: "hk-gateway", via: ["lon-border", "hk-gateway"], state: "active" }] }),
-    "view.mesh_notices": () => [],
+    "view.mesh_notices": () => window.localStorage.getItem("anixops.mock-mesh-unmanaged") === "on"
+      ? [{ id: "mesh.notice.address_unmanaged", key: "address_unmanaged", values: [2], action: null, notify: false }]
+      : [],
   };
   const control = (request) => {
     switch (request.cmd) {

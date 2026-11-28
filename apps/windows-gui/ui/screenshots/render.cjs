@@ -128,6 +128,14 @@ const shots = [
   { name: "mesh-path-editor-light", mode: "proxy", theme: "light", nav: "组网", size: WIDE, storage: { "anixops.mock-mesh": "on" }, steps: async (page) => { await radio(page, "路径").click(); await page.getByRole("button", { name: "添加路径" }).click(); } },
   { name: "mesh-add-credential-light", mode: "proxy", theme: "light", nav: "组网", size: LAPTOP, storage: { "anixops.mock-mesh": "on" }, steps: async (page) => { await open(page, page.getByRole("button", { name: "更多" }), '[role="menu"]'); await page.getByRole("menuitem", { name: "添加网络" }).click(); await radio(page, "入网凭据").click(); } },
   { name: "mesh-members-en-light", mode: "proxy", theme: "light", language: "en", nav: "Mesh", size: SMALL, storage: { "anixops.mock-mesh": "on" } },
+  {
+    name: "mesh-unmanaged-light", mode: "proxy", theme: "light", nav: "组网", size: WIDE,
+    storage: { "anixops.mock-mesh": "on", "anixops.mock-mesh-unmanaged": "on" },
+    verify: async (page) => {
+      await page.getByText("2 台成员的地址未受管，地址可能变化。", { exact: true }).waitFor();
+      await page.locator(".nav-item").getByText("组网有提示", { exact: true }).waitFor({ state: "attached" });
+    },
+  },
 ];
 
 const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon" };

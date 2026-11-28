@@ -988,6 +988,7 @@ private fun noticeText(notice: MeshNotice): String {
         "mesh.notice.detour_loss" -> stringResource(R.string.mesh_notice_detour_loss, text(0), text(1), text(2), (number(3) ?: 0).toString())
         "mesh.notice.detour_latency" -> number(3)?.let { stringResource(R.string.mesh_notice_detour_latency, text(0), text(1), text(2), it.toString()) }
             ?: stringResource(R.string.mesh_notice_detour_slow, text(0), text(1), text(2))
+        "mesh.notice.address_unmanaged" -> stringResource(R.string.mesh_notice_address_unmanaged, number(0) ?: 0)
         "mesh.notice.partial" -> {
             val names = (notice.values.getOrNull(1) as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.orEmpty()
             pluralStringResource(R.plurals.mesh_notice_partial, names.size, names.size, ListFormatter.getInstance().format(names))

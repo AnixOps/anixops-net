@@ -1045,6 +1045,7 @@
         <item quantity="one">Joining: %1$d peer connected</item>
         <item quantity="other">Joining: %1$d peers connected</item>
     </plurals>
+    <string name="mesh_notice_address_unmanaged">Unmanaged member addresses: %1$d. These addresses may change.</string>
     <plurals name="mesh_notice_partial">
         <item quantity="one">%1$d member unreachable: %2$s.</item>
         <item quantity="other">%1$d members unreachable: %2$s.</item>

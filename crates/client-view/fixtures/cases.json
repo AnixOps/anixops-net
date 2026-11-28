@@ -1,5 +1,177 @@
 [
  {
+  "command": "view.mesh_notices",
+  "args": {
+   "status": {
+    "network": {
+     "id": "office",
+     "state": "joined"
+    },
+    "self": {
+     "id": "self",
+     "role": "gateway",
+     "addressManaged": false
+    },
+    "members": [
+     {
+      "id": "managed",
+      "role": "server",
+      "state": "online",
+      "addressManaged": true
+     },
+     {
+      "id": "legacy",
+      "role": "host",
+      "state": "online"
+     },
+     {
+      "id": "phone",
+      "role": "client",
+      "state": "online",
+      "addressManaged": false
+     },
+     {
+      "id": "remote",
+      "role": "border",
+      "state": "online",
+      "addressManaged": false
+     }
+    ]
+   }
+  },
+  "answer": [
+   {
+    "id": "mesh.notice.address_unmanaged",
+    "key": "address_unmanaged",
+    "values": [
+     2
+    ],
+    "action": null,
+    "notify": false
+   }
+  ]
+ },
+ {
+  "command": "view.mesh_entry",
+  "args": {
+   "status": {
+    "network": {
+     "id": "office",
+     "state": "joined"
+    },
+    "self": {
+     "id": "self",
+     "role": "gateway",
+     "addressManaged": false
+    },
+    "members": [
+     {
+      "id": "managed",
+      "role": "server",
+      "state": "online",
+      "addressManaged": true
+     },
+     {
+      "id": "legacy",
+      "role": "host",
+      "state": "online"
+     },
+     {
+      "id": "phone",
+      "role": "client",
+      "state": "online",
+      "addressManaged": false
+     },
+     {
+      "id": "remote",
+      "role": "border",
+      "state": "online",
+      "addressManaged": false
+     }
+    ]
+   }
+  },
+  "answer": {
+   "available": true,
+   "network": "office",
+   "state": "joined",
+   "security": null,
+   "online": 4,
+   "total": 4,
+   "attention": true
+  }
+ },
+ {
+  "command": "view.mesh_notices",
+  "args": {
+   "status": {
+    "network": {
+     "id": "legacy",
+     "state": "joined"
+    },
+    "members": [
+     {
+      "id": "retained",
+      "role": "gateway",
+      "state": "online"
+     },
+     {
+      "id": "unknown",
+      "role": "server",
+      "state": "online",
+      "addressManaged": null
+     },
+     {
+      "id": "phone",
+      "role": "client",
+      "state": "online",
+      "addressManaged": false
+     }
+    ]
+   }
+  },
+  "answer": []
+ },
+ {
+  "command": "view.mesh_entry",
+  "args": {
+   "status": {
+    "network": {
+     "id": "legacy",
+     "state": "joined"
+    },
+    "members": [
+     {
+      "id": "retained",
+      "role": "gateway",
+      "state": "online"
+     },
+     {
+      "id": "unknown",
+      "role": "server",
+      "state": "online",
+      "addressManaged": null
+     },
+     {
+      "id": "phone",
+      "role": "client",
+      "state": "online",
+      "addressManaged": false
+     }
+    ]
+   }
+  },
+  "answer": {
+   "available": true,
+   "network": "legacy",
+   "state": "joined",
+   "security": null,
+   "online": 3,
+   "total": 3,
+   "attention": false
+  }
+ },
+ {
   "command": "view.parse_app_link",
   "args": {
    "link": "anixops://connect"
@@ -7272,6 +7444,15 @@
      [
       "sha-host"
      ]
+    ],
+    "action": null,
+    "notify": false
+   },
+   {
+    "id": "mesh.notice.address_unmanaged",
+    "key": "address_unmanaged",
+    "values": [
+     1
     ],
     "action": null,
     "notify": false

@@ -1172,6 +1172,8 @@ export const traditional: Record<string, string> = {
   "{from}至{to}已改经{via}：直连链路延迟 {latency} ms。": "{from}至{to}已改經{via}：直連鏈路延遲 {latency} ms。",
   "{from}至{to}已改经{via}：直连链路延迟过高。": "{from}至{to}已改經{via}：直連鏈路延遲過高。",
   "{count} 台成员不可达：{names}。": "{count} 台成員無法連線：{names}。",
+  "{count} 台成员的地址未受管，地址可能变化。": "{count} 台成員的位址未受管，位址可能變更。",
+  "组网有提示": "組網有提示",
   "名称须为 1–64 个字符，不含斜杠。": "名稱須為 1–64 個字元，不含斜線。",
   "缺少密钥。": "缺少金鑰。",
   "缺少对端地址。": "缺少對端位址。",
