@@ -836,6 +836,7 @@ html.qr-scanning #root { visibility: hidden; }
 .mesh-group { display: flex; gap: 10px; align-items: baseline; width: 100%; padding: 8px 12px; color: inherit; font: inherit; font-size: 12px; text-align: left; background: var(--fill-1); border: 0; border-top: .5px solid var(--hairline); }
 .mesh-group small { color: var(--text2); }
 .mesh-child { display: flex; gap: 12px; padding: 4px 12px 4px 34px; color: var(--text2); font-size: 12px; }
+.mesh-child-value { display: flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
 .mesh-child.match { color: inherit; font-weight: 600; }
 .mesh-child.warning { color: var(--warning); }
 .mesh-detail { min-width: 0; }

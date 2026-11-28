@@ -33,6 +33,36 @@ const toggle = (page, name) => page.getByRole("switch", { name }).or(page.getByR
 /** Opens a pop-up (menu or list) and waits until it is on screen. */
 const open = async (page, locator, popup) => { await locator.first().click(); await page.locator(popup).first().waitFor({ state: "visible" }); };
 
+async function verifyMeshNames(page) {
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  const detail = page.getByRole("complementary", { name: "成员详情" });
+  const camera = page.getByRole("row", { name: /camera/ });
+  const printer = page.getByRole("row", { name: /printer/ });
+  await camera.getByText("camera.uk.mesh.internal", { exact: true }).waitFor();
+  await printer.getByText("192.168.10.14", { exact: true }).waitFor();
+  if (await printer.getByRole("button").count()) throw new Error("address-only mesh child offered a copy action");
+
+  for (const [container, label, text] of [
+    [camera, "拷贝内网域名", "camera.uk.mesh.internal"],
+    [detail, "拷贝内网域名", "nas.uk.mesh.internal"],
+    [detail, "拷贝虚拟地址", "10.144.0.5"],
+  ]) {
+    const copy = container.getByRole("button", { name: label, exact: true });
+    await copy.click();
+    await copy.locator('[role="status"]').filter({ hasText: "已拷贝" }).waitFor({ state: "attached" });
+    const actual = await page.evaluate(() => navigator.clipboard.readText());
+    if (actual !== text) throw new Error(`mesh copy: expected ${text}, got ${actual}`);
+  }
+
+  const duplicate = "本地区有同名成员。";
+  const crossNetwork = "网络 Lab 也应答这个名字，域名解析会返回全部地址。";
+  await detail.getByText(crossNetwork, { exact: true }).waitFor();
+  if (await detail.getByText(duplicate, { exact: true }).count()) throw new Error("cross-network duplicate showed a same-region warning");
+  await page.getByRole("row", { name: /laptop.*重名/ }).getByRole("button", { name: "laptop" }).click();
+  await detail.getByText(duplicate, { exact: true }).waitFor();
+  if (await detail.getByText(crossNetwork, { exact: true }).count()) throw new Error("legacy duplicate showed a cross-network warning");
+}
+
 /** name, mode, theme, sidebar item, window size, and what to do on the page before the picture. */
 const shots = [
   { name: "debug-requests-light", mode: "debug", theme: "light", nav: "请求", size: WIDE, steps: async (page) => { await row(page, 4).click(); } },
@@ -89,7 +119,7 @@ const shots = [
   { name: "select-rules-light", mode: "proxy", theme: "light", nav: "规则", size: LAPTOP, steps: async (page) => { await open(page, page.locator(".select-trigger"), '[role="listbox"]'); } },
   { name: "select-rules-dark", mode: "proxy", theme: "dark", nav: "规则", size: LAPTOP, steps: async (page) => { await open(page, page.locator(".select-trigger"), '[role="listbox"]'); } },
   // 组网: the member list with a member's details, the subnets and the cross-region links, in both themes and in English.
-  { name: "mesh-members-light", mode: "proxy", theme: "light", nav: "组网", size: WIDE, storage: { "anixops.mock-mesh": "on" }, steps: async (page) => { await page.getByRole("row", { name: /nas/ }).first().click(); } },
+  { name: "mesh-members-light", mode: "proxy", theme: "light", nav: "组网", size: WIDE, storage: { "anixops.mock-mesh": "on" }, steps: async (page) => { await page.getByRole("button", { name: "nas", exact: true }).click(); }, verify: verifyMeshNames },
   { name: "mesh-members-dark", mode: "proxy", theme: "dark", nav: "组网", size: WIDE, storage: { "anixops.mock-mesh": "on" }, steps: async (page) => { await page.getByRole("row", { name: /nas/ }).first().click(); } },
   { name: "mesh-subnets-light", mode: "proxy", theme: "light", nav: "组网", size: LAPTOP, storage: { "anixops.mock-mesh": "on" }, steps: async (page) => { await radio(page, "子网").click(); } },
   { name: "mesh-paths-dark", mode: "proxy", theme: "dark", nav: "组网", size: LAPTOP, storage: { "anixops.mock-mesh": "on" }, steps: async (page) => { await radio(page, "路径").click(); } },
@@ -175,6 +205,7 @@ async function shoot(browser, url, shot) {
     const checked = await audit(page, file);
     problems.push(...checked.findings);
     measures = checked.measures;
+    if (shot.verify) await shot.verify(page);
   }
   await context.close();
   return { problems, measures };

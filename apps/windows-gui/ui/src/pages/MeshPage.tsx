@@ -377,7 +377,10 @@ function MemberRow({ view, row, showRegion, selected, onSelect }: {
       {(row.open || selected) && shown.map((child) => (
         <div key={`${child.kind}:${child.name}`} className={`mesh-child ${child.match ? "match" : ""}`} role="row">
           <span role="cell" className={child.kind === "subnet" ? "mono" : ""}>{child.name}</span>
-          <span role="cell" className="mono">{child.domain ?? child.address ?? ""}</span>
+          <span role="cell" className="mesh-child-value">
+            <span className="mono">{child.domain || child.address || ""}</span>
+            {child.domain && <CopyButton label={t("拷贝内网域名")} text={child.domain} />}
+          </span>
         </div>
       ))}
       {(row.open || selected) && shown.length < children.length && (
@@ -395,8 +398,8 @@ function MemberDetail({ view, row }: { view: MeshView; row: MeshMemberRow }) {
   return (
     <Card title={row.name}>
       <Row label={t("状态")} value={row.state === "unreachable" ? t("不可达") : connectionLabel(row.connection, row.hops)} />
-      {row.domain && <Row label={t("内网域名")} value={<span className="mono">{row.domain}</span>}><CopyButton label={t("拷贝")} text={row.domain} /></Row>}
-      {row.address && <Row label={t("虚拟地址")} value={<span className="mono">{row.address}</span>}><CopyButton label={t("拷贝")} text={row.address} /></Row>}
+      {row.domain && <Row label={t("内网域名")} value={<span className="mono">{row.domain}</span>}><CopyButton label={t("拷贝内网域名")} text={row.domain} /></Row>}
+      {row.address && <Row label={t("虚拟地址")} value={<span className="mono">{row.address}</span>}><CopyButton label={t("拷贝虚拟地址")} text={row.address} /></Row>}
       {row.region && <Row label={t("地区")} value={regionName(view.head, row.region)} />}
       {roleLabel(row.role) && <Row label={t("角色")} value={roleLabel(row.role)} />}
       {(row.duplicateInRegion || ((row.marks ?? []).includes("duplicate") && (row.duplicateNetworks ?? []).length === 0)) && <Row label={t("重名")} hint={t("本地区有同名成员。")} />}
@@ -700,8 +703,8 @@ function Self({ view, network, busy, perform }: {
     <>
       <Card title={t("身份")}>
         <Row label={t("名称")} value={own.name} />
-        {own.address && <Row label={t("虚拟地址")} value={<span className="mono">{own.address}</span>}><CopyButton label={t("拷贝")} text={own.address} /></Row>}
-        {own.domain && <Row label={t("内网域名")} value={<span className="mono">{own.domain}</span>}><CopyButton label={t("拷贝")} text={own.domain} /></Row>}
+        {own.address && <Row label={t("虚拟地址")} value={<span className="mono">{own.address}</span>}><CopyButton label={t("拷贝虚拟地址")} text={own.address} /></Row>}
+        {own.domain && <Row label={t("内网域名")} value={<span className="mono">{own.domain}</span>}><CopyButton label={t("拷贝内网域名")} text={own.domain} /></Row>}
         {regionText && <Row label={t("地区")} value={regionText} />}
         {own.region && others.length > 0 && own.regionState !== "pending" && (
           <Row label={t("变更地区")} hint={t("变更需网络管理者批准。")}>
