@@ -53,9 +53,12 @@ async function run() {
     await page.locator(".nav-item", { hasText: "组网" }).first().click();
     const detail = page.getByRole("complementary", { name: "成员详情" });
     for (const expected of expectations.members) {
-      const button = page.getByRole("row").filter({ hasText: expected.address })
-        .getByRole("button", { name: expected.name, exact: true });
-      await button.click();
+      const member = page.getByRole("button", { name: expected.name, exact: true });
+      const row = page.getByRole("row").filter({ has: member, hasText: expected.address });
+      const hasDuplicate = expected.sameNetwork || expected.acrossRegions || expected.localRegion || expected.otherNetworks?.length;
+      await row.waitFor();
+      assert.equal(await row.getByText("重名", { exact: true }).count(), Number(Boolean(hasDuplicate)), `${expected.name}: duplicate badge`);
+      await row.getByRole("button", { name: expected.name, exact: true }).click();
       await verifyCopy(page, detail, "拷贝内网域名", expected.domain);
       await verifyCopy(page, detail, "拷贝虚拟地址", expected.address);
       for (const [kind, text] of Object.entries(warningTexts)) {

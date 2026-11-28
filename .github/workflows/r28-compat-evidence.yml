@@ -24,7 +24,7 @@ jobs:
       - name: Checkout exact R28 client
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: 3af59e281e3d308b9efe0c3f1d10f804a2dea0b5
+          ref: bdbbfebb81972bbd94e789c2794a70c3c7ab523b
           persist-credentials: false
 
       - name: Checkout exact RC manifest and lockfile source
@@ -63,4 +63,70 @@ jobs:
           if [[ "$GATE" == preview ]]; then export ANIXOPS_MESH_PREVIEW=1; fi
           rustup toolchain install stable --profile minimal
           cargo +stable test --locked -p client-core --lib backend::mesh::tests
-          cargo +stable test --locked -p client-view mesh
+          cargo +stable test --locked -p client-view
+
+  projection:
+    name: Core snapshot to desktop clipboard
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout evidence and Core captures
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Checkout exact R28 client
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: bdbbfebb81972bbd94e789c2794a70c3c7ab523b
+          path: client
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: 9
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: client/apps/windows-gui/ui/pnpm-lock.yaml
+
+      - name: Build the desktop UI and install Chromium
+        shell: bash
+        working-directory: client
+        run: |
+          set -euxo pipefail
+          pnpm --dir apps/windows-gui/ui install --frozen-lockfile
+          pnpm --dir apps/windows-gui/ui run build
+          tools="$RUNNER_TEMP/playwright-tools"
+          npm install --prefix "$tools" --no-audit --no-fund playwright@1.63.0
+          "$tools/node_modules/.bin/playwright" install --with-deps chromium
+          echo "NODE_PATH=$tools/node_modules" >> "$GITHUB_ENV"
+
+      - name: Project exact snapshots through Rust and verify desktop copy and wording
+        shell: bash
+        run: |
+          set -euxo pipefail
+          unset ANIXOPS_MESH_PREVIEW ANIXOPS_MESH04_PREVIEW
+          mkdir -p client/crates/client-view/examples
+          cp crates/client-view/examples/project_mesh_status.rs client/crates/client-view/examples/
+          cp apps/windows-gui/ui/screenshots/mesh-compat.cjs client/apps/windows-gui/ui/screenshots/
+          rustup toolchain install stable --profile minimal
+          cd client
+          git rev-parse HEAD
+          cargo +stable build --locked -p client-view --example project_mesh_status
+          origin=http://127.0.0.1:4173
+          pnpm --dir apps/windows-gui/ui exec vite preview --host 127.0.0.1 --port 4173 --strictPort &
+          server=$!
+          trap 'kill "$server"' EXIT
+          for attempt in {1..20}; do curl --fail --silent "$origin" > /dev/null && break; sleep 1; done
+          curl --fail --silent "$origin" > /dev/null
+          shopt -s nullglob
+          captures=(../r28-evidence/*.status.json)
+          test "${#captures[@]}" -ge 2
+          for snapshot in "${captures[@]}"; do
+            echo "Core snapshot: $snapshot"
+            target/debug/examples/project_mesh_status < "$snapshot" > "$RUNNER_TEMP/projected.json"
+            node apps/windows-gui/ui/screenshots/mesh-compat.cjs "$origin" "$RUNNER_TEMP/projected.json" "${snapshot%.status.json}.expected.json"
+          done
