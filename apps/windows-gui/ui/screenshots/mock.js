@@ -155,8 +155,16 @@
       { key: "uk", count: 4, matched: 4, open: true, rows: [
         member("n0", "workstation", "uk", { self: true, role: "server", connection: "self", address: "10.144.0.2", domain: "workstation.office.mesh" }),
         member("n1", "lon-border", "uk", { role: "border", address: "10.144.0.1", domain: "lon-border.office.mesh", latencyMs: 4, tone: "fast" }),
-        member("n2", "nas", "uk", { role: "host", address: "10.144.0.5", domain: "nas.office.mesh", latencyMs: 6, tone: "fast", contains: { noun: "vms", count: 3 } }),
-        member("n3", "laptop", "uk", { role: "client", address: "10.144.0.9", domain: "laptop.office.mesh", connection: "relay", hops: 1, transport: "tcp", latencyMs: 38, tone: "fast" }),
+        member("n2", "nas", "uk", {
+          role: "host", address: "10.144.0.5", domain: "nas.uk.mesh.internal", latencyMs: 6, tone: "fast",
+          marks: ["duplicate"], duplicateNetworks: ["Lab"], contains: { noun: "vms", count: 1 },
+          children: [
+            { kind: "vm", name: "camera", address: "192.168.10.8", domain: "camera.uk.mesh.internal" },
+            { kind: "subnet", name: "192.168.10.0/24" },
+            { kind: "device", name: "printer", address: "192.168.10.14" },
+          ],
+        }),
+        member("n3", "laptop", "uk", { role: "client", address: "10.144.0.9", domain: "laptop.office.mesh", connection: "relay", hops: 1, transport: "tcp", latencyMs: 38, tone: "fast", marks: ["duplicate"] }),
       ] },
       { key: "hk", count: 2, matched: 2, open: true, link: { latencyMs: 182, via: "lon-border", state: "ok" }, worst: { state: "unreachable", count: 1 }, rows: [
         member("n4", "hk-gateway", "hk", { role: "gateway", address: "10.144.1.1", domain: "hk-gateway.office.mesh", connection: "cross_region", hops: 2, latencyMs: 186, tone: "medium", contains: { noun: "subnets", count: 2 } }),

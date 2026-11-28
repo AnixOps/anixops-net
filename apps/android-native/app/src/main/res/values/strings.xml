@@ -891,6 +891,8 @@
     <string name="mesh_via">Via %1$s</string>
     <string name="mesh_self">This device</string>
     <string name="mesh_duplicate_detail">Another member in this region has the same name.</string>
+    <string name="mesh_duplicate_in_network">This network has records with the same name.</string>
+    <string name="mesh_duplicate_across_regions">This network has the same name in multiple regions.</string>
     <string name="mesh_duplicate_networks_detail">Also answered by: %1$s. Name lookups return all addresses.</string>
     <string name="mesh_list_separator">", "</string>
     <string name="mesh_unmanaged_detail">Address unmanaged: the virtual address may change and the internal domain name may stop resolving.</string>

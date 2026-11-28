@@ -27,6 +27,7 @@ export interface MeshMembers {
   groups: MeshGroup[];
   total: number;
   matched: number;
+  ownDomain?: string;
 }
 
 export interface MeshGroup {
@@ -77,6 +78,8 @@ export interface MeshMemberRow {
   marks?: string[];
   /** Another member in this network's region has the same name (`duplicateOf`); only given when true. */
   duplicateInRegion?: boolean;
+  duplicateInNetwork?: boolean;
+  duplicateAcrossRegions?: boolean;
   /** Other networks that answer the same name (display names); only given when there are some. */
   duplicateNetworks?: string[];
 }

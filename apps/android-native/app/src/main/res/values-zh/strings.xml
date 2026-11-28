@@ -856,6 +856,8 @@
     <string name="mesh_via">经 %1$s</string>
     <string name="mesh_self">本机</string>
     <string name="mesh_duplicate_detail">本地区有同名成员。</string>
+    <string name="mesh_duplicate_in_network">此网络有同名记录。</string>
+    <string name="mesh_duplicate_across_regions">此网络在多个地区有同名记录。</string>
     <string name="mesh_duplicate_networks_detail">网络 %1$s 也应答这个名字，域名解析会返回全部地址。</string>
     <string name="mesh_list_separator">、</string>
     <string name="mesh_unmanaged_detail">地址未受管：虚拟地址可能变化，内网域名可能随之失效。</string>
